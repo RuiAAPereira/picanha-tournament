@@ -75,6 +75,7 @@ describe('createKnockoutBracket', () => {
     expect(bracket.rounds.map(round => round.matches.length)).toEqual([4, 2, 1])
     expect(bracket.rounds[1].matches[1]).toMatchObject({
       id: 'knockout-2-2',
+      round: 2,
       home: { type: 'winner', matchId: 'knockout-1-3' },
       away: { type: 'winner', matchId: 'knockout-1-4' },
     })
@@ -85,8 +86,8 @@ describe('createKnockoutBracket', () => {
     const bracket = createKnockoutBracket(emptyGroups(5), 8)
     expect(bracket.qualification).toEqual(qualificationFor(5).qualification)
     expect(bracket.rounds[0].matches[2]).toMatchObject({
-      home: { type: 'crossing', match: 2, side: 'home' },
-      away: { type: 'crossing', match: 2, side: 'away' },
+      home: { type: 'crossing', pairIndex: 2, side: 'home' },
+      away: { type: 'crossing', pairIndex: 2, side: 'away' },
     })
   })
 
@@ -127,20 +128,29 @@ describe('rankRunnersUp', () => {
 
   it('ranks runners-up by points then fewest balls left', () => {
     expect(rankRunnersUp([group('A', 3, 2), group('B', 6), group('C', 3, 1)], [], 2)).toEqual({
+      status: 'ready',
       order: ['B2', 'C2', 'A2'],
-      pendingTies: [],
     })
   })
 
   it('waits for every group to finish', () => {
-    expect(rankRunnersUp([group('A', 3), group('B', 6, 0, false)], [], 1)).toEqual({ order: null, pendingTies: [] })
+    expect(rankRunnersUp([group('A', 3), group('B', 6, 0, false)], [], 1)).toEqual({ status: 'waiting' })
+  })
+
+  it('reports a group whose second place is still tied', () => {
+    const tiedB: GroupOutcome = {
+      id: 'B',
+      finished: true,
+      standings: [standing('B1', 6, 1), standing('B2', 3, 2, true), standing('B3', 3, 2, true)],
+    }
+    expect(rankRunnersUp([group('A', 3), tiedB], [], 1)).toEqual({ status: 'groupTie', groupId: 'B' })
   })
 
   it('requires a draw for a tie that reaches the qualifying places and applies a stored draw', () => {
     const groups = [group('A', 3), group('B', 3), group('C', 6)]
-    expect(rankRunnersUp(groups, [], 2)).toEqual({ order: null, pendingTies: [['A2', 'B2']] })
-    expect(rankRunnersUp(groups, [['B2', 'A2']], 2).order).toEqual(['C2', 'B2', 'A2'])
-    expect(rankRunnersUp(groups, [], 1).order).toEqual(['C2', 'A2', 'B2'])
+    expect(rankRunnersUp(groups, [], 2)).toEqual({ status: 'drawNeeded', pendingTies: [['A2', 'B2']] })
+    expect(rankRunnersUp(groups, [['B2', 'A2']], 2)).toEqual({ status: 'ready', order: ['C2', 'B2', 'A2'] })
+    expect(rankRunnersUp(groups, [], 1)).toEqual({ status: 'ready', order: ['C2', 'A2', 'B2'] })
   })
 })
 

@@ -13,7 +13,9 @@ const sameSet = (a: PlayerId[], b: PlayerId[]) => a.length === b.length && a.eve
 
 /**
  * Applies stored draw orders on top of calculated standings. A draw applies only to a tie with
- * exactly the same players, so a correction that changes the tie makes the old draw stale.
+ * exactly the same players, so a correction that changes the tie makes the old draw stale. Stored draws
+ * are never deleted: if a later correction recreates the same tied set, the earlier draw applies again
+ * (it was already audited when it was made).
  */
 export function applyTieDraws(standings: GroupStanding[], draws: PlayerId[][]): GroupStanding[] {
   const result = standings.map(row => ({ ...row }))

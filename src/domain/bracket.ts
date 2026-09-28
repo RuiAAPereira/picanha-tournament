@@ -7,11 +7,13 @@ export type Seed = { group: string; rank: 1 | 2 }
 /** Where a knockout player comes from: a fixed group place, a best-placed crossing, or a previous winner. */
 export type Slot =
   | { type: 'group'; group: string; rank: 1 | 2 }
-  | { type: 'crossing'; match: number; side: 'home' | 'away' }
+  // pairIndex indexes the pairs returned by crossRunnersUp, which are sorted by the home winner's group.
+  | { type: 'crossing'; pairIndex: number; side: 'home' | 'away' }
   | { type: 'winner'; matchId: MatchId }
 
 export type KnockoutMatch = {
   id: MatchId
+  /** 1-based, matching the `knockout-<round>-<match>` id. */
   round: number
   home: Slot
   away: Slot
@@ -35,8 +37,8 @@ const isPowerOfTwo = (value: number) => Number.isInteger(value) && value >= 2 &&
 function roundOneSlots(groupCount: number, qualification: Qualification): [Slot, Slot][] {
   if (qualification.perGroup === 1) {
     const count = (groupCount + qualification.bestPlacedExtras) / 2
-    return Array.from({ length: count }, (_, match): [Slot, Slot] =>
-      [{ type: 'crossing', match, side: 'home' }, { type: 'crossing', match, side: 'away' }])
+    return Array.from({ length: count }, (_, pairIndex): [Slot, Slot] =>
+      [{ type: 'crossing', pairIndex, side: 'home' }, { type: 'crossing', pairIndex, side: 'away' }])
   }
   if (groupCount === 1) return [[groupSlot(0, 1), groupSlot(0, 2)]]
   // Winners of paired groups meet the other group's runner-up; the reversed crossings form the second half.
@@ -47,7 +49,10 @@ function roundOneSlots(groupCount: number, qualification: Qualification): [Slot,
   ]
 }
 
-/** Builds the bracket from fixed slots; only the number of groups matters, players are placed by resolveBracket. */
+/**
+ * Builds the bracket from fixed slots. Only `groups.length` is read (the standings parameter is the
+ * plan-mandated signature); players are placed later by resolveBracket.
+ */
 export function createKnockoutBracket(
   groups: GroupStanding[][],
   knockoutSize: number,
@@ -67,7 +72,7 @@ export function createKnockoutBracket(
   let slots = roundOneSlots(groupCount, rule)
   for (let round = 0; slots.length > 0; round++) {
     const matches = slots.map(([home, away], index): KnockoutMatch =>
-      ({ id: knockoutId(round, index), round, home, away, homePlayerId: null, awayPlayerId: null }))
+      ({ id: knockoutId(round, index), round: round + 1, home, away, homePlayerId: null, awayPlayerId: null }))
     rounds.push({ matches })
     slots = matches.length === 1 ? [] : Array.from({ length: matches.length / 2 }, (_, index): [Slot, Slot] => [
       { type: 'winner', matchId: matches[index * 2].id },
@@ -96,7 +101,7 @@ export function crossRunnersUp(groupIds: string[], runnerUpGroups: string[]): [S
   for (let index = 0; index < rest.length; index += 2) {
     pairs.push([{ group: rest[index], rank: 1 }, { group: rest[index + 1], rank: 1 }])
   }
-  return pairs.sort(([a], [b]) => a.group.localeCompare(b.group))
+  return pairs.sort(([a], [b]) => (a.group < b.group ? -1 : a.group > b.group ? 1 : 0))
 }
 
 /** The player holding a group place, once the group is finished and the place is not tied. */
@@ -105,19 +110,21 @@ export function seedPlayer(outcome: GroupOutcome, rank: 1 | 2): PlayerId | null 
   return outcome.standings.find(row => row.rank === rank && !row.requiresDraw)?.playerId ?? null
 }
 
+export type RunnerUpRanking =
+  | { status: 'waiting' }
+  | { status: 'groupTie'; groupId: string }
+  | { status: 'drawNeeded'; pendingTies: PlayerId[][] }
+  | { status: 'ready'; order: PlayerId[] }
+
 /**
  * Orders all runners-up by points, then fewest balls left, then stored draws (no head-to-head across
  * groups). A tie reaching the qualifying places must be drawn, since it decides who plays whom.
  */
-export function rankRunnersUp(
-  outcomes: GroupOutcome[],
-  draws: PlayerId[][],
-  extras: number,
-): { order: PlayerId[] | null; pendingTies: PlayerId[][] } {
+export function rankRunnersUp(outcomes: GroupOutcome[], draws: PlayerId[][], extras: number): RunnerUpRanking {
+  if (!outcomes.every(outcome => outcome.finished)) return { status: 'waiting' }
   const runnersUp = outcomes.map(outcome => outcome.standings.find(row => row.rank === 2 && !row.requiresDraw))
-  if (!outcomes.every(outcome => outcome.finished) || runnersUp.some(row => !row)) {
-    return { order: null, pendingTies: [] }
-  }
+  const blocked = outcomes.find((_, index) => !runnersUp[index])
+  if (blocked) return { status: 'groupTie', groupId: blocked.id }
   const sorted = (runnersUp as GroupStanding[])
     .map(row => ({ ...row, headToHeadResult: null }))
     .sort((a, b) => b.points - a.points || a.ballsLeft - b.ballsLeft)
@@ -128,8 +135,8 @@ export function rankRunnersUp(
   const drawn = applyTieDraws(ranked, draws)
   const pending = pendingTies(drawn).filter(tie => drawn.find(row => row.playerId === tie[0])!.rank <= extras)
   return pending.length > 0
-    ? { order: null, pendingTies: pending }
-    : { order: drawn.map(row => row.playerId), pendingTies: [] }
+    ? { status: 'drawNeeded', pendingTies: pending }
+    : { status: 'ready', order: drawn.map(row => row.playerId) }
 }
 
 /**
@@ -141,8 +148,9 @@ export function resolveBracket(bracket: Bracket, outcomes: GroupOutcome[], runne
   const { qualification } = bracket
   let crossings: (PlayerId | null)[][] = []
   if (qualification.perGroup === 1) {
-    const { order } = rankRunnersUp(outcomes, runnerUpDraws, qualification.bestPlacedExtras)
-    if (order && outcomes.every(outcome => seedPlayer(outcome, 1))) {
+    const ranking = rankRunnersUp(outcomes, runnerUpDraws, qualification.bestPlacedExtras)
+    if (ranking.status === 'ready' && outcomes.every(outcome => seedPlayer(outcome, 1))) {
+      const { order } = ranking
       const groupOfPlayer = (playerId: PlayerId) =>
         outcomes.find(outcome => outcome.standings.some(row => row.playerId === playerId))!.id
       crossings = crossRunnersUp(outcomes.map(outcome => outcome.id),
@@ -158,7 +166,7 @@ export function resolveBracket(bracket: Bracket, outcomes: GroupOutcome[], runne
         const outcome = outcomeOf(slot.group)
         return outcome ? seedPlayer(outcome, slot.rank) : null
       }
-      case 'crossing': return crossings[slot.match]?.[slot.side === 'home' ? 0 : 1] ?? null
+      case 'crossing': return crossings[slot.pairIndex]?.[slot.side === 'home' ? 0 : 1] ?? null
       case 'winner': return winners.get(slot.matchId) ?? null
     }
   }

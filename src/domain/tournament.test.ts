@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { proposeFormats, type DrawResult, type ReadyProposal } from './formats'
 import {
-  applyMatchResult, correctionImpact, correctMatchResult, createTournamentState, groupStandings, resolveTieDraw,
-  type ResultInput, type TournamentState,
+  applyMatchResult, correctionImpact, correctMatchResult, createTournamentState, findMatch, groupStandings,
+  isGroupFinished, pendingTieScopes, resolveTieDraw, type ResultInput, type TournamentState,
 } from './tournament'
 import type { MatchId, PlayerId } from './types'
 
@@ -51,10 +51,19 @@ const groupOf = (state: TournamentState, id: string) => state.groups.find(group 
 const knockout = (state: TournamentState, id: MatchId) =>
   state.bracket.rounds.flatMap(round => round.matches).find(match => match.id === id)!
 
-/** Plays every group match so the group finishes in the given order. */
-function playGroup(state: TournamentState, groupId: string, order: PlayerId[]): TournamentState {
-  return groupOf(state, groupId).matches.reduce((next, match) =>
-    play(next, match.id, order.indexOf(match.player1Id) < order.indexOf(match.player2Id) ? match.player1Id : match.player2Id), state)
+/** Plays every group match so the group finishes in the given order; `ballsOf` sets the loser's remaining balls. */
+function playGroup(
+  state: TournamentState,
+  groupId: string,
+  order: PlayerId[],
+  ballsOf: (loserId: PlayerId) => number = () => 0,
+): TournamentState {
+  return groupOf(state, groupId).matches.reduce((next, match) => {
+    const [winner, loser] = order.indexOf(match.player1Id) < order.indexOf(match.player2Id)
+      ? [match.player1Id, match.player2Id]
+      : [match.player2Id, match.player1Id]
+    return play(next, match.id, winner, ballsOf(loser))
+  }, state)
 }
 
 function fixtureId(state: TournamentState, groupId: string, first: PlayerId, second: PlayerId): MatchId {
@@ -142,6 +151,45 @@ describe('applyMatchResult', () => {
     expect(groupOf(next, 'A').matches.find(match => match.id === matchId)!.result)
       .toEqual({ winnerId: 'a1', loserBallsRemaining: 7, kind: 'withdrawal' })
   })
+
+  it('rejects an unknown result kind', () => {
+    const state = twoGroups()
+    const bogus = { ...input(fixtureId(state, 'A', 'a1', 'a2'), 'a1'), kind: 'forfeit' } as unknown as ResultInput
+    expect(() => applyMatchResult(state, bogus)).toThrow(/tipo de resultado/i)
+  })
+
+  it('records each result in the audit log', () => {
+    const state = twoGroups()
+    const matchId = fixtureId(state, 'A', 'a1', 'a2')
+    expect(applyMatchResult(state, input(matchId, 'a2', 3, LATER)).auditLog).toEqual([{
+      type: 'result', at: LATER, matchId, result: { winnerId: 'a2', loserBallsRemaining: 3, kind: 'played' },
+    }])
+  })
+})
+
+describe('selectors', () => {
+  it('finds preliminary, group and knockout matches without throwing', () => {
+    const state = create(readyProposal(9, 4, 2),
+      drawOf([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3', 'b4']], [['p1', 'p2']], ['A']))
+    expect(findMatch(state, 'preliminary-1')).toMatchObject({ player1Id: 'p1', player2Id: 'p2' })
+    expect(findMatch(state, 'group-B-1-2')).toMatchObject({ groupId: 'B', player1Id: 'b1', player2Id: 'b2' })
+    expect(findMatch(state, 'knockout-2-1')).toMatchObject({ homePlayerId: null, awayPlayerId: null })
+    expect(findMatch(state, 'group-A-1-2')).toBeUndefined()
+  })
+
+  it('reports whether a group is finished', () => {
+    const state = playGroup(twoGroups(), 'A', ['a1', 'a2', 'a3', 'a4'])
+    expect(isGroupFinished(state, 'A')).toBe(true)
+    expect(isGroupFinished(state, 'B')).toBe(false)
+    expect(isGroupFinished(state, 'Z')).toBe(false)
+  })
+
+  it('lists the scopes with a tie waiting for a draw', () => {
+    expect(pendingTieScopes(twoGroups())).toEqual([])
+    expect(pendingTieScopes(withTieDrawn(false))).toEqual([{ type: 'group', groupId: 'A' }])
+    expect(pendingTieScopes(withTieDrawn())).toEqual([])
+    expect(pendingTieScopes(threeGroupsFinished())).toEqual([{ type: 'runnersUp' }])
+  })
 })
 
 describe('resolveTieDraw', () => {
@@ -159,7 +207,7 @@ describe('resolveTieDraw', () => {
     expect([first, second, third].map(row => row.playerId).sort()).toEqual(['a1', 'a2', 'a3'])
     expect(knockout(drawn, 'knockout-1-1').homePlayerId).toBe(first.playerId)
     expect(knockout(drawn, 'knockout-1-2').awayPlayerId).toBe(second.playerId)
-    expect(drawn.auditLog).toEqual([{
+    expect(drawn.auditLog.slice(tied.auditLog.length)).toEqual([{
       type: 'tieDraw', at: LATER, scope: { type: 'group', groupId: 'A' },
       playerIds: [first.playerId, second.playerId, third.playerId],
     }])
@@ -171,12 +219,19 @@ describe('resolveTieDraw', () => {
     expect(() => resolveTieDraw(cycle(), { type: 'group', groupId: 'A' }, () => 1, AT)).toThrow(/sorteio/i)
   })
 
-  it('draws tied best-placed runners-up and never crosses a runner-up with its own winner', () => {
+  it('explains why a runner-up draw is not possible', () => {
+    expect(() => resolveTieDraw(groupsFinished(), { type: 'runnersUp' }, () => 0, AT)).toThrow(/não tem melhores segundos/i)
     let state = create(readyProposal(9, 3, 3), drawOf([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 'c3']]))
-    for (const group of ['A', 'B', 'C']) {
-      const id = group.toLowerCase()
-      state = playGroup(state, group, [`${id}1`, `${id}2`, `${id}3`])
+    state = playGroup(playGroup(state, 'A', ['a1', 'a2', 'a3']), 'B', ['b1', 'b2', 'b3'])
+    expect(() => resolveTieDraw(state, { type: 'runnersUp' }, () => 0, AT)).toThrow(/grupos ainda não terminaram/i)
+    for (const [winner, loser] of [['c1', 'c2'], ['c2', 'c3'], ['c3', 'c1']]) {
+      state = play(state, fixtureId(state, 'C', winner, loser), winner)
     }
+    expect(() => resolveTieDraw(state, { type: 'runnersUp' }, () => 0, AT)).toThrow('Resolva primeiro o empate do grupo C.')
+  })
+
+  it('draws tied best-placed runners-up and never crosses a runner-up with its own winner', () => {
+    const state = threeGroupsFinished()
     expect(state.bracket.rounds[0].matches.every(match => !match.homePlayerId && !match.awayPlayerId)).toBe(true)
 
     const drawn = resolveTieDraw(state, { type: 'runnersUp' }, () => 0, LATER)
@@ -239,6 +294,45 @@ describe('corrections', () => {
     })
   })
 
+  it('does not report empty future matches', () => {
+    const state = groupsFinished()
+    const correction = input(fixtureId(state, 'B', 'b2', 'b3'), 'b3', 2, LATER)
+    expect(correctionImpact(state, correction)).toEqual({ requiresConfirmation: true, invalidatedMatchIds: ['knockout-1-1'] })
+  })
+
+  it('re-seeds both semi-finals when group A swaps first and second', () => {
+    let state = play(withSemiFinal(), 'knockout-1-2', 'b1', 3)
+    state = play(state, 'knockout-2-1', 'a1', 0)
+    const correction = input(fixtureId(state, 'A', 'a1', 'a2'), 'a2', 1, LATER)
+    expect(correctionImpact(state, correction)).toEqual({
+      requiresConfirmation: true,
+      invalidatedMatchIds: ['knockout-1-1', 'knockout-1-2', 'knockout-2-1'],
+    })
+    const corrected = correctMatchResult(state, correction, true)
+    expect(corrected.bracket.rounds.flatMap(round => round.matches)
+      .map(match => [match.homePlayerId, match.awayPlayerId, match.result ?? null]))
+      .toEqual([['a2', 'b2', null], ['b1', 'a1', null], [null, null, null]])
+  })
+
+  it('re-pairs crossings when the best runner-up changes', () => {
+    // Runners-up rank by balls left: a2 (1) ahead of b2 (2) and c2 (3), so A2 meets C1 and A1 meets B1.
+    let state = threeGroupsFinished({ a2: 1, b2: 2, c2: 3 })
+    expect(state.bracket.rounds[0].matches.map(match => [match.homePlayerId, match.awayPlayerId]))
+      .toEqual([['a1', 'b1'], ['c1', 'a2']])
+    state = play(state, 'knockout-1-1', 'a1', 2)
+
+    // a2 now left 5 balls, so b2 becomes the best runner-up and meets C1; A1–B1 is unaffected.
+    const correction = input(fixtureId(state, 'A', 'a1', 'a2'), 'a1', 5, LATER)
+    expect(correctionImpact(state, correction)).toEqual({
+      requiresConfirmation: true,
+      invalidatedMatchIds: ['knockout-1-2', 'knockout-2-1'],
+    })
+    const corrected = correctMatchResult(state, correction, true)
+    expect(knockout(corrected, 'knockout-1-1')).toEqual(knockout(state, 'knockout-1-1'))
+    expect(knockout(corrected, 'knockout-1-2')).toMatchObject({ homePlayerId: 'c1', awayPlayerId: 'b2' })
+    expect(knockout(corrected, 'knockout-2-1')).toMatchObject({ homePlayerId: 'a1', awayPlayerId: null })
+  })
+
   it('invalidates the final when a semi-final winner changes', () => {
     let state = play(withSemiFinal(), 'knockout-1-2', 'b1', 3)
     state = play(state, 'knockout-2-1', 'a1', 0)
@@ -283,7 +377,7 @@ describe('state purity', () => {
   it('survives a JSON round-trip mid-tournament', () => {
     const drawn = withTieDrawn()
     const state = correctMatchResult(drawn, input(fixtureId(drawn, 'B', 'b3', 'b4'), 'b3', 4, LATER), false)
-    expect(state.auditLog.map(event => event.type)).toEqual(['tieDraw', 'correction'])
+    expect(state.auditLog.slice(-2).map(event => event.type)).toEqual(['tieDraw', 'correction'])
     expect(JSON.parse(JSON.stringify(state))).toStrictEqual(state)
   })
 
@@ -297,9 +391,21 @@ describe('state purity', () => {
     expect(JSON.stringify(state)).toBe(snapshot)
 
     const tied = deepFreeze(withTieDrawn(false))
-    resolveTieDraw(tied, { type: 'group', groupId: 'A' }, () => 0.3, LATER)
+    const tiedSnapshot = JSON.stringify(tied)
+    expect(resolveTieDraw(tied, { type: 'group', groupId: 'A' }, () => 0.3, LATER).tieDraws).toHaveLength(1)
+    expect(tied.tieDraws).toEqual([])
+    expect(JSON.stringify(tied)).toBe(tiedSnapshot)
   })
 })
+
+function threeGroupsFinished(ballsByLoser: Record<PlayerId, number> = {}): TournamentState {
+  let state = create(readyProposal(9, 3, 3), drawOf([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 'c3']]))
+  for (const group of ['A', 'B', 'C']) {
+    const id = group.toLowerCase()
+    state = playGroup(state, group, [`${id}1`, `${id}2`, `${id}3`], loser => ballsByLoser[loser] ?? 0)
+  }
+  return state
+}
 
 function withTieDrawn(drawn = true): TournamentState {
   let state = playGroup(twoGroups(), 'B', ['b1', 'b2', 'b3', 'b4'])

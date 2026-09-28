@@ -1,4 +1,7 @@
-import { createKnockoutBracket, rankRunnersUp, resolveBracket, type Bracket, type GroupOutcome } from './bracket'
+import {
+  createKnockoutBracket, rankRunnersUp, resolveBracket,
+  type Bracket, type GroupOutcome, type KnockoutMatch, type RunnerUpRanking,
+} from './bracket'
 import { createRoundRobinFixtures, type DrawResult, type ReadyProposal } from './formats'
 import { ALL_BALLS_REMAINING, calculateStandings, recordResult } from './standings'
 import { applyTieDraws, drawOrder, pendingTies } from './tiebreak'
@@ -11,6 +14,7 @@ export type TieScope = { type: 'group'; groupId: string } | { type: 'runnersUp' 
 export type TieDraw = { scope: TieScope; playerIds: PlayerId[] }
 
 export type AuditEvent =
+  | { type: 'result'; at: string; matchId: MatchId; result: MatchResult }
   | { type: 'tieDraw'; at: string; scope: TieScope; playerIds: PlayerId[] }
   | {
     type: 'correction'
@@ -100,10 +104,34 @@ export function groupStandings(state: TournamentState, groupId: string): GroupSt
   return applyTieDraws(calculateStandings(group.playerIds, group.matches), drawsFor(state, { type: 'group', groupId }))
 }
 
+/** A group is finished once its fixtures exist and all have results; an unknown group is not finished. */
+export function isGroupFinished(state: TournamentState, groupId: string): boolean {
+  const group = state.groups.find(candidate => candidate.id === groupId)
+  return !!group && group.matches.length > 0 && group.matches.every(match => match.result)
+}
+
+/** Any preliminary, group or knockout match by id. */
+export function findMatch(state: TournamentState, matchId: MatchId): TournamentMatch | KnockoutMatch | undefined {
+  return [...state.preliminaryMatches, ...state.groups.flatMap(group => group.matches)].find(match => match.id === matchId)
+    ?? state.bracket.rounds.flatMap(round => round.matches).find(match => match.id === matchId)
+}
+
+/** Scopes in which resolveTieDraw would currently draw a tie. */
+export function pendingTieScopes(state: TournamentState): TieScope[] {
+  const scopes = state.groups
+    .filter(group => isGroupFinished(state, group.id) && pendingTies(groupStandings(state, group.id)).length > 0)
+    .map((group): TieScope => ({ type: 'group', groupId: group.id }))
+  return runnerUpRanking(state)?.status === 'drawNeeded' ? [...scopes, { type: 'runnersUp' }] : scopes
+}
+
 export function applyMatchResult(state: TournamentState, input: ResultInput): TournamentState {
   const match = locate(state, input.matchId)
   if (match.result) throw new Error('O jogo já tem resultado. Use a correção para o alterar.')
-  return derive(withResults(state, new Map([[input.matchId, buildResult(match.players, input)]])))
+  const result = buildResult(match.players, input)
+  return derive({
+    ...withResults(state, new Map([[input.matchId, result]])),
+    auditLog: [...state.auditLog, { type: 'result', at: input.at, matchId: input.matchId, result }],
+  })
 }
 
 /** Which already-defined matches a correction would undo. Confirmation is required when any would. */
@@ -142,29 +170,36 @@ export function resolveTieDraw(state: TournamentState, scope: TieScope, random: 
 
 function groupTies(state: TournamentState, groupId: string): PlayerId[][] {
   const standings = groupStandings(state, groupId)
-  if (!outcomes(state).find(outcome => outcome.id === groupId)!.finished) {
-    throw new Error('O grupo ainda não terminou.')
-  }
+  if (!isGroupFinished(state, groupId)) throw new Error('O grupo ainda não terminou.')
   return pendingTies(standings)
 }
 
-function runnerUpTies(state: TournamentState): PlayerId[][] {
-  const groups = outcomes(state)
-  if (!groups.every(group => group.finished)) throw new Error('Os grupos ainda não terminaram.')
-  return rankRunnersUp(groups, drawsFor(state, { type: 'runnersUp' }), state.bracket.qualification.bestPlacedExtras).pendingTies
+/** Null when the format qualifies both group places, so there is no runner-up ranking. */
+function runnerUpRanking(state: TournamentState): RunnerUpRanking | null {
+  const { qualification } = state.bracket
+  if (qualification.perGroup === 2) return null
+  return rankRunnersUp(outcomes(state), drawsFor(state, { type: 'runnersUp' }), qualification.bestPlacedExtras)
 }
 
+function runnerUpTies(state: TournamentState): PlayerId[][] {
+  const ranking = runnerUpRanking(state)
+  if (!ranking) throw new Error('Este formato não tem melhores segundos classificados.')
+  if (ranking.status === 'waiting') throw new Error('Os grupos ainda não terminaram.')
+  if (ranking.status === 'groupTie') throw new Error(`Resolva primeiro o empate do grupo ${ranking.groupId}.`)
+  return ranking.status === 'drawNeeded' ? ranking.pendingTies : []
+}
+
+const sameScope = (a: TieScope, b: TieScope) =>
+  a.type === 'runnersUp' ? b.type === 'runnersUp' : b.type === 'group' && a.groupId === b.groupId
+
 function drawsFor(state: TournamentState, scope: TieScope): PlayerId[][] {
-  return state.tieDraws
-    .filter(draw => draw.scope.type === scope.type
-      && (scope.type === 'runnersUp' || (draw.scope.type === 'group' && draw.scope.groupId === scope.groupId)))
-    .map(draw => draw.playerIds)
+  return state.tieDraws.filter(draw => sameScope(draw.scope, scope)).map(draw => draw.playerIds)
 }
 
 function outcomes(state: TournamentState): GroupOutcome[] {
   return state.groups.map(group => ({
     id: group.id,
-    finished: group.matches.length > 0 && group.matches.every(match => match.result),
+    finished: isGroupFinished(state, group.id),
     standings: groupStandings(state, group.id),
   }))
 }
@@ -197,12 +232,11 @@ function placeGroup(state: TournamentState, group: TournamentGroup): TournamentG
 }
 
 function locate(state: TournamentState, matchId: MatchId): { players: (PlayerId | null)[]; result?: MatchResult } {
-  const fixture = [...state.preliminaryMatches, ...state.groups.flatMap(group => group.matches)]
-    .find(match => match.id === matchId)
-  if (fixture) return { players: [fixture.player1Id, fixture.player2Id], result: fixture.result }
-  const knockout = state.bracket.rounds.flatMap(round => round.matches).find(match => match.id === matchId)
-  if (knockout) return { players: [knockout.homePlayerId, knockout.awayPlayerId], result: knockout.result }
-  throw new Error('O jogo não existe.')
+  const match = findMatch(state, matchId)
+  if (!match) throw new Error('O jogo não existe.')
+  return 'homePlayerId' in match
+    ? { players: [match.homePlayerId, match.awayPlayerId], result: match.result }
+    : { players: [match.player1Id, match.player2Id], result: match.result }
 }
 
 function buildResult(players: (PlayerId | null)[], input: ResultInput): MatchResult {
@@ -212,6 +246,9 @@ function buildResult(players: (PlayerId | null)[], input: ResultInput): MatchRes
     throw new Error('O vencedor tem de ser um dos jogadores do jogo.')
   }
   const kind = input.kind ?? 'played'
+  if (kind !== 'played' && kind !== 'withdrawal') {
+    throw new Error('O tipo de resultado tem de ser jogo disputado ou desistência.')
+  }
   const balls = input.loserBallsRemaining
   if (kind === 'played' && (!Number.isInteger(balls) || balls < 0 || balls > ALL_BALLS_REMAINING)) {
     throw new Error(`As bolas restantes têm de ser um número inteiro de 0 a ${ALL_BALLS_REMAINING}.`)
@@ -237,11 +274,14 @@ function withResults(state: TournamentState, updates: Map<MatchId, MatchResult |
 const sameResult = (a: MatchResult, b: MatchResult) =>
   a.winnerId === b.winnerId && a.loserBallsRemaining === b.loserBallsRemaining && a.kind === b.kind
 
+type CorrectionPlan = { previous: MatchResult; next: MatchResult; invalidatedMatchIds: MatchId[] }
+
 /**
  * Before/after slot diff. A match is invalidated when its players change and it was already played or
- * had both players; everything fed by an invalidated match follows. Listed in schedule order.
+ * had both players. A match fed by an invalidated match follows when it already had a player or a
+ * result (empty future matches are not reported). Listed in schedule order.
  */
-function planCorrection(state: TournamentState, input: ResultInput) {
+function planCorrection(state: TournamentState, input: ResultInput): CorrectionPlan {
   const match = locate(state, input.matchId)
   if (!match.result) throw new Error('O jogo ainda não tem resultado. Registe o resultado em vez de o corrigir.')
   const previous = match.result
@@ -262,7 +302,8 @@ function planCorrection(state: TournamentState, input: ResultInput) {
     const updated = after.bracket.rounds[roundIndex].matches[index]
     const changed = updated.homePlayerId !== before.homePlayerId || updated.awayPlayerId !== before.awayPlayerId
     const defined = before.result || (before.homePlayerId && before.awayPlayerId)
-    const downstream = [before.home, before.away]
+    const occupied = before.result || before.homePlayerId || before.awayPlayerId
+    const downstream = occupied && [before.home, before.away]
       .some(slot => slot.type === 'winner' && invalidated.includes(slot.matchId))
     if ((changed && defined) || downstream) invalidated.push(before.id)
   }))
