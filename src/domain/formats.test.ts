@@ -46,7 +46,63 @@ describe('proposeFormats', () => {
     const proposals = proposeFormats(13)
     expect(proposals[0].groupSize).toBe(4)
     expect(proposals.find(proposal => proposal.groupSize === 3)?.preliminaryRound?.matchCount).toBe(1)
-    expect(proposals[0].reason).toMatch(/preferência por grupos de 4/i)
+    expect(proposals[0].reason).toMatch(/grupos de 4/i)
+  })
+
+  it.each([
+    [12, 3, 4, { perGroup: 1, bestPlacedExtras: 1, extrasFromRank: 2 }],
+    [16, 4, 8, { perGroup: 2, bestPlacedExtras: 0 }],
+    [20, 5, 8, { perGroup: 1, bestPlacedExtras: 3, extrasFromRank: 2 }],
+    [4, 1, 2, { perGroup: 2, bestPlacedExtras: 0 }],
+  ])('defines the qualification rule for %i players', (count, groupCount, knockoutSize, qualification) => {
+    const top = proposeFormats(count)[0]
+    expect(top).toMatchObject({ groupSize: 4, groupCount, knockoutSize, qualification })
+  })
+
+  it('keeps knockoutSize equal to qualifiers for every proposal', () => {
+    for (let count = 4; count <= 32; count++) {
+      for (const proposal of proposeFormats(count)) {
+        const { perGroup, bestPlacedExtras } = proposal.qualification
+        expect(proposal.knockoutSize).toBe(perGroup * proposal.groupCount + bestPlacedExtras)
+        expect(proposal.preliminaryRound?.matchCount ?? 0).toBeLessThanOrEqual(proposal.groupCount)
+      }
+    }
+  })
+
+  it('states the qualification rule in the reason', () => {
+    expect(proposeFormats(12)[0].reason).toMatch(/melhor segundo classificado/i)
+    expect(proposeFormats(16)[0].reason).toMatch(/2 primeiros de cada grupo/i)
+    expect(proposeFormats(20)[0].reason).toMatch(/3 melhores segundos classificados/i)
+    expect(proposeFormats(4)[0].reason).toMatch(/final/i)
+  })
+
+  it('writes reasons that depend on rank', () => {
+    const proposals = proposeFormats(13)
+    expect(proposals[0].reason).toMatch(/^Recomendado/)
+    expect(proposals[1].reason).toMatch(/^Alternativa/)
+    expect(proposals.slice(1).every(proposal => /^Alternativa/.test(proposal.reason))).toBe(true)
+    expect(proposeFormats(16)[1].reason).toMatch(/em vez de|pré-eliminatória/)
+  })
+
+  it('ranks clean formats before preliminary ones', () => {
+    expect(proposeFormats(6)[0]).toMatchObject({ groupSize: 3, groupCount: 2, preliminaryRound: undefined })
+    expect(proposeFormats(9)[0]).toMatchObject({ groupSize: 3, groupCount: 3, preliminaryRound: undefined })
+    expect(proposeFormats(15)[0].preliminaryRound).toBeUndefined()
+    expect(proposeFormats(7)[0]).toMatchObject({
+      groupSize: 3, groupCount: 2, preliminaryRound: { matchCount: 1, entrantsToDraw: 2, advancingCount: 1 },
+    })
+  })
+
+  it('never proposes more preliminary matches than groups', () => {
+    expect(proposeFormats(8).some(proposal => proposal.groupCount === 1 && proposal.groupSize === 4)).toBe(false)
+    for (const count of [7, 8, 10, 14]) {
+      expect(proposeFormats(count).every(proposal =>
+        (proposal.preliminaryRound?.matchCount ?? 0) <= proposal.groupCount)).toBe(true)
+    }
+  })
+
+  it('blocks with a zero qualification rule', () => {
+    expect(proposeFormats(3)[0].qualification).toEqual({ perGroup: 0, bestPlacedExtras: 0 })
   })
 
   it('blocks an unsupported player count with an explanation', () => {
@@ -76,6 +132,23 @@ describe('drawGroups', () => {
     expect(result.groups.reduce((sum, group) => sum + group.preliminaryWinnerMatchIds.length, 0)).toBe(1)
     expect(result.groups.map(group => group.playerIds.length + group.preliminaryWinnerMatchIds.length)).toEqual([4, 4, 4])
     expect([...result.preliminaryPlayerIds, ...result.groups.flatMap(group => group.playerIds)].sort()).toEqual(players(13).sort())
+  })
+
+  it('spreads preliminary winner slots across groups from the same random source', () => {
+    const proposal = proposeFormats(14)[0]
+    expect(proposal.preliminaryRound?.matchCount).toBe(2)
+    const first = drawGroups(players(14), proposal, seededRandom(5))
+    expect(first).toEqual(drawGroups(players(14), proposal, seededRandom(5)))
+    const firstMatchGroups = new Set<string>()
+    for (let seed = 1; seed <= 30; seed++) {
+      const result = drawGroups(players(14), proposal, seededRandom(seed))
+      expect(result.groups.map(group => group.id)).toEqual(['A', 'B', 'C'])
+      expect(result.groups.every(group => group.preliminaryWinnerMatchIds.length <= 1)).toBe(true)
+      expect(result.groups.every(group => group.playerIds.length + group.preliminaryWinnerMatchIds.length === 4)).toBe(true)
+      expect(result.groups.flatMap(group => group.preliminaryWinnerMatchIds).sort()).toEqual(['preliminary-1', 'preliminary-2'])
+      firstMatchGroups.add(result.groups.find(group => group.preliminaryWinnerMatchIds.includes('preliminary-1'))!.id)
+    }
+    expect(firstMatchGroups.size).toBeGreaterThan(1)
   })
 
   it('rejects duplicate entrants and a proposal for a different count', () => {
