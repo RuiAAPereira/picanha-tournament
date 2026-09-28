@@ -54,6 +54,20 @@ function largestPowerOfTwoAtMost(value: number): number {
   return result
 }
 
+/** The single qualification rule: the largest power-of-two knockout that fits two qualifiers per group. */
+export function qualificationFor(groupCount: number): { knockoutSize: number; qualification: Qualification } {
+  if (!Number.isInteger(groupCount) || groupCount < 1) {
+    throw new RangeError('O número de grupos tem de ser um inteiro positivo.')
+  }
+  const knockoutSize = largestPowerOfTwoAtMost(groupCount * 2)
+  return {
+    knockoutSize,
+    qualification: knockoutSize === groupCount * 2
+      ? { perGroup: 2, bestPlacedExtras: 0 }
+      : { perGroup: 1, bestPlacedExtras: knockoutSize - groupCount, extrasFromRank: 2 },
+  }
+}
+
 function describeFinal(candidate: Candidate): string {
   if (candidate.groupCount === 1) return 'final entre o 1.º e o 2.º classificados'
   const { qualification } = candidate
@@ -132,17 +146,13 @@ export function proposeFormats(playerCount: number, preferredGroupSize = 4): For
       const matchCount = playerCount - groupCount * groupSize
       // each group receives at most one preliminary winner
       if (matchCount > groupCount) continue
-      const knockoutSize = largestPowerOfTwoAtMost(groupCount * 2)
       candidates.push({
         creationBlocked: false,
         playerCount,
         groupSize,
         groupCount,
         groupSizes: Array(groupCount).fill(groupSize),
-        knockoutSize,
-        qualification: knockoutSize === groupCount * 2
-          ? { perGroup: 2, bestPlacedExtras: 0 }
-          : { perGroup: 1, bestPlacedExtras: knockoutSize - groupCount, extrasFromRank: 2 },
+        ...qualificationFor(groupCount),
         preliminaryRound: matchCount > 0
           ? { matchCount, entrantsToDraw: matchCount * 2, advancingCount: matchCount }
           : undefined,
