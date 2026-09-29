@@ -1,0 +1,5 @@
+/* Shared by the operator and presentation windows; everything else is scoped per window. */
+html,
+body {
+  margin: 0;
+}

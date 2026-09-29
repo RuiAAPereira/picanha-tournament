@@ -11,12 +11,8 @@ type ModalProps = {
   returnFocus?: () => HTMLElement | null
 }
 
-/** The page heading takes focus when the element to return to is gone. */
-function pageHeading(): HTMLElement | null {
-  const heading = document.querySelector<HTMLElement>('main h2')
-  if (heading) heading.tabIndex = -1
-  return heading
-}
+/** The page heading (focusable through its own `tabIndex={-1}`) takes focus when the element to return to is gone. */
+const pageHeading = () => document.querySelector<HTMLElement>('main h2')
 
 /**
  * Modal shell rendered beside the app root: labelled by its title, the rest of the page is inert, focus

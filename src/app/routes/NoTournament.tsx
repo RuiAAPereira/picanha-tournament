@@ -7,7 +7,7 @@ export default function NoTournament() {
   if (loading) return <p>A carregar o torneio guardado…</p>
   return (
     <section aria-labelledby="none-title">
-      <h2 id="none-title">Sem torneio em curso</h2>
+      <h2 id="none-title" tabIndex={-1}>Sem torneio em curso</h2>
       <p><a href={ROUTES.newTournament}>Criar um novo torneio</a></p>
     </section>
   )

@@ -24,7 +24,7 @@ export default function HomePage() {
 
   return (
     <section aria-labelledby="home-title">
-      <h2 id="home-title">Início</h2>
+      <h2 id="home-title" tabIndex={-1}>Início</h2>
       {loading && <p>A carregar o torneio guardado…</p>}
       {loadError && <p role="alert" className="error">{loadError}</p>}
       {state && <p>Torneio em curso: <strong>{state.name}</strong></p>}

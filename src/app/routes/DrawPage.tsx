@@ -20,7 +20,7 @@ export default function DrawPage() {
     }
     return (
       <section aria-labelledby="draw-title">
-        <h2 id="draw-title">Sorteio</h2>
+        <h2 id="draw-title" tabIndex={-1}>Sorteio</h2>
         <p><strong>{setup.name}</strong> — {setup.players.length} jogadores</p>
         <p>{setup.proposal.reason}</p>
         <p>O sorteio é feito uma única vez e fica guardado. Pode abrir a apresentação antes de sortear.</p>
@@ -37,7 +37,7 @@ export default function DrawPage() {
 
   return (
     <section aria-labelledby="draw-title">
-      <h2 id="draw-title">Sorteio</h2>
+      <h2 id="draw-title" tabIndex={-1}>Sorteio</h2>
       <p><strong>{state.name}</strong> — {state.proposal.reason}</p>
       {state.preliminaryMatches.length > 0 && (
         <section aria-labelledby="draw-preliminary">

@@ -34,7 +34,7 @@ export default function GroupsPage() {
 
   return (
     <section aria-labelledby="groups-title">
-      <h2 id="groups-title">Grupos</h2>
+      <h2 id="groups-title" tabIndex={-1}>Grupos</h2>
       <div aria-live="polite">
         {ties.length > 0 && (
           <div className="banner warning">

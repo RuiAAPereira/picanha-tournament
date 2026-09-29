@@ -37,6 +37,15 @@ describe('startup', () => {
     expect(screen.queryByRole('button', { name: 'Carregar demonstração' })).not.toBeInTheDocument()
   })
 
+  it('never waits for the tournament list before finishing startup', async () => {
+    const repository = fakeRepository(snapshotOf(fourPlayerState()))
+    repository.list.mockImplementation(() => new Promise(() => {}))
+    renderOperator('#/operator', { repository })
+    const resume = await screen.findByRole('button', { name: 'Continuar torneio' })
+    await vi.waitFor(() => expect(resume).toBeEnabled())
+    expect(screen.queryByText(/a carregar/i)).not.toBeInTheDocument()
+  })
+
   it('warns, without failing, when the data folder cannot be written', async () => {
     const repository = fakeRepository()
     repository.loadCurrent.mockRejectedValue(storageError('unwritable'))

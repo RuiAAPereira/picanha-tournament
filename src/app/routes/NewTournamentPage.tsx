@@ -59,7 +59,7 @@ export default function NewTournamentPage() {
 
   return (
     <section aria-labelledby="new-title">
-      <h2 id="new-title">Novo torneio</h2>
+      <h2 id="new-title" tabIndex={-1}>Novo torneio</h2>
       <form onSubmit={create} noValidate>
         <label htmlFor={ids.name}>Nome do torneio</label>
         <input

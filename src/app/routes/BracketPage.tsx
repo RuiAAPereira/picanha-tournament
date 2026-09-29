@@ -16,7 +16,7 @@ export default function BracketPage() {
 
   return (
     <section aria-labelledby="bracket-title">
-      <h2 id="bracket-title">Fase final</h2>
+      <h2 id="bracket-title" tabIndex={-1}>Fase final</h2>
       {champion && <p className="champion">Campeão: {playerName(state, champion)}</p>}
       <div className="bracket">
         {rounds.map((round, index) => {

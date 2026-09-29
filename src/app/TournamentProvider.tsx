@@ -61,6 +61,8 @@ export function TournamentProvider(props: TournamentProviderProps) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
 
+  // Created once: `actions` may only call autosave's stable methods, never read its state fields,
+  // which would stay frozen at their first-render values here.
   const [actions] = useState(() => {
     // Latest values, so quick successive actions never build on a stale render.
     let current: TournamentState | null = null
@@ -105,12 +107,12 @@ export function TournamentProvider(props: TournamentProviderProps) {
       const commitsAtStart = commits
       setLoading(true)
       const { repository } = deps.current
-      const listed = repository.list()
+      // Never awaited: a slow listing only reserves ids whenever it arrives and must not hold up startup.
+      void repository.list()
         .then(summaries => summaries.forEach(summary => takenIds.add(summary.tournamentId)))
         .catch(() => {})
       try {
         const snapshot = await repository.loadCurrent()
-        await listed
         if (snapshot) takenIds.add(snapshot.tournamentId)
         if (commits === commitsAtStart) {
           current = snapshot?.state ?? null
