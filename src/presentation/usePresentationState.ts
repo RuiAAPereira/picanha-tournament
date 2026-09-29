@@ -65,7 +65,9 @@ export function usePresentationState(initialState?: PresentationState): Presenta
         setMutedState(next)
       })),
     ]
-    fetchPresentationSnapshot()
+    // Read only once the listeners are registered, so nothing published in between is missed.
+    Promise.all(unlisteners)
+      .then(() => (active ? fetchPresentationSnapshot() : null))
       .then(snapshot => {
         if (!active || !snapshot) return
         if (!received && snapshot.state) dispatch({ type: 'restored', state: snapshot.state })

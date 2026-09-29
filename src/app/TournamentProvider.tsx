@@ -89,8 +89,9 @@ export function TournamentProvider(props: TournamentProviderProps) {
     const withAt = (entry: ResultEntry) => ({ ...entry, at: deps.current.now() })
     const newId = (name: string, at: string) => claimUniqueId(tournamentIdFor(name, at), takenIds)
     const warnPresentation = (error: unknown) => {
+      if (!presentationOpened) return
       console.error('[presentation]', error)
-      if (presentationOpened) setNotice({ tone: 'warning', text: PRESENTATION_OUT_OF_DATE })
+      setNotice({ tone: 'warning', text: PRESENTATION_OUT_OF_DATE })
     }
     /** Runs an optional TV call; a failure only warns. */
     function tellPresentation(send: ((presentation: PresentationPort) => Promise<void> | undefined)) {

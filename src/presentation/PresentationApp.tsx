@@ -29,6 +29,16 @@ function Content({ state }: { state: PresentationState | null }) {
   }
 }
 
+/** How many items each screen reveals in turn; mirrors the `revealItem` children of each component. */
+function revealItems(state: PresentationState | null): number {
+  switch (state?.kind) {
+    case 'draw': return 1 + state.payload.groups.length + (state.payload.preliminaryMatches.length > 0 ? 1 : 0)
+    case 'result': return state.payload.corrected ? 6 : 5
+    case 'champion': return 3
+    default: return 2
+  }
+}
+
 /**
  * The TV window: read-only, with a single mute button. `initialState` renders a fixed state (tests,
  * previews); otherwise the state comes from the operator window through Tauri events.
@@ -48,7 +58,12 @@ export default function PresentationApp({ initialState }: { initialState?: Prese
   return (
     <main aria-label="Apresentação" className="presentation">
       {showsTournament && <p className="tournament-name">{feed.state!.tournamentName}</p>}
-      <Reveal revealKey={feed.revealKey} done={reducedMotion || feed.reveal === 'done'} onComplete={feed.completeReveal}>
+      <Reveal
+        revealKey={feed.revealKey}
+        done={reducedMotion || feed.reveal === 'done'}
+        items={revealItems(feed.state)}
+        onComplete={feed.completeReveal}
+      >
         <Content state={feed.state} />
       </Reveal>
       <button type="button" className="mute" onClick={() => feed.setMuted(!feed.muted)}>

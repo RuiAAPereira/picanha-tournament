@@ -110,11 +110,22 @@ describe('live updates', () => {
     let answer!: (value: PresentationSnapshot) => void
     tauri.invoke.mockImplementation(() => new Promise(resolve => { answer = resolve }))
     render(<PresentationApp />)
-    await vi.waitFor(() => expect(tauri.handlers.has('presentation-state')).toBe(true))
+    await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith('get_presentation_state'))
     emit('presentation-state', championState)
     await act(async () => answer(snapshot(resultState)))
     expect(screen.getByText('Campeão')).toBeInTheDocument()
     expect(screen.queryByText('Grupo A')).not.toBeInTheDocument()
+  })
+
+  it('reads the last state only once every listener is registered', async () => {
+    let listenersAtFetch = -1
+    tauri.invoke.mockImplementation(async () => {
+      listenersAtFetch = tauri.handlers.size
+      return snapshot(null)
+    })
+    render(<PresentationApp />)
+    await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith('get_presentation_state'))
+    expect(listenersAtFetch).toBe(3)
   })
 
   it('shows a waiting screen before anything is published', async () => {
@@ -136,6 +147,17 @@ describe('live updates', () => {
     expect(screen.getByText('Rui')).toBeVisible()
     expect(screen.getByText(/2 bolas/)).toBeVisible()
   })
+
+  it('lets the reveal play for 2 to 5 seconds before it completes on its own', async () => {
+    tauri.invoke.mockResolvedValue(snapshot(null))
+    render(<PresentationApp />)
+    await vi.waitFor(() => expect(tauri.handlers.has('presentation-state')).toBe(true))
+    emit('presentation-state', championState)
+    await act(() => new Promise(resolve => setTimeout(resolve, 2000)))
+    expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'playing')
+    await vi.waitFor(() => expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'done'), { timeout: 6000 })
+    expect(screen.getByText('Campeão')).toBeVisible()
+  }, 10000)
 
   it('shows a state received on mount without replaying its reveal', async () => {
     tauri.invoke.mockResolvedValue(snapshot(resultState))
