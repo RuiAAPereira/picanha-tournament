@@ -1,18 +1,11 @@
-import { useSyncExternalStore } from 'react'
-
-function subscribeToHashChange(onChange: () => void) {
-  window.addEventListener('hashchange', onChange)
-  return () => window.removeEventListener('hashchange', onChange)
-}
+import { ROUTES, useHashRoute } from './app/hashRoute'
+import OperatorApp from './app/OperatorApp'
+import { TournamentProvider } from './app/TournamentProvider'
 
 export default function App() {
-  const route = useSyncExternalStore(
-    subscribeToHashChange,
-    () => window.location.hash,
-    () => '#/operator',
-  )
+  const route = useHashRoute()
 
-  if (route === '#/presentation') {
+  if (route === ROUTES.presentation) {
     return (
       <main aria-label="Apresentação">
         <h1>Apresentação</h1>
@@ -22,9 +15,8 @@ export default function App() {
   }
 
   return (
-    <main aria-label="Torneio">
-      <h1>Picanha Tournament</h1>
-      <p>Área do organizador</p>
-    </main>
+    <TournamentProvider>
+      <OperatorApp />
+    </TournamentProvider>
   )
 }
