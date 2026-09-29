@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { proposeFormats, type DrawResult, type ReadyProposal } from './formats'
 import {
   applyMatchResult, correctionImpact, correctMatchResult, createTournamentState, findMatch, groupStandings,
-  isGroupFinished, pendingTieScopes, resolveTieDraw, type ResultInput, type TournamentState,
+  isGroupFinished, isKnockoutMatch, pendingTieScopes, resolveTieDraw, type ResultInput, type TournamentState,
 } from './tournament'
 import type { MatchId, PlayerId } from './types'
 
@@ -175,6 +175,14 @@ describe('selectors', () => {
     expect(findMatch(state, 'group-B-1-2')).toMatchObject({ groupId: 'B', player1Id: 'b1', player2Id: 'b2' })
     expect(findMatch(state, 'knockout-2-1')).toMatchObject({ homePlayerId: null, awayPlayerId: null })
     expect(findMatch(state, 'group-A-1-2')).toBeUndefined()
+  })
+
+  it('tells knockout matches apart from preliminary and group matches', () => {
+    const state = create(readyProposal(9, 4, 2),
+      drawOf([['a1', 'a2', 'a3'], ['b1', 'b2', 'b3', 'b4']], [['p1', 'p2']], ['A']))
+    expect(isKnockoutMatch(findMatch(state, 'knockout-1-1')!)).toBe(true)
+    expect(isKnockoutMatch(findMatch(state, 'preliminary-1')!)).toBe(false)
+    expect(isKnockoutMatch(findMatch(state, 'group-B-1-2')!)).toBe(false)
   })
 
   it('reports whether a group is finished', () => {

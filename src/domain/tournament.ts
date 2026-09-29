@@ -116,6 +116,9 @@ export function findMatch(state: TournamentState, matchId: MatchId): TournamentM
     ?? state.bracket.rounds.flatMap(round => round.matches).find(match => match.id === matchId)
 }
 
+export const isKnockoutMatch = (match: TournamentMatch | KnockoutMatch): match is KnockoutMatch =>
+  'homePlayerId' in match
+
 /** Scopes in which resolveTieDraw would currently draw a tie. */
 export function pendingTieScopes(state: TournamentState): TieScope[] {
   const scopes = state.groups
@@ -234,7 +237,7 @@ function placeGroup(state: TournamentState, group: TournamentGroup): TournamentG
 function locate(state: TournamentState, matchId: MatchId): { players: (PlayerId | null)[]; result?: MatchResult } {
   const match = findMatch(state, matchId)
   if (!match) throw new Error('O jogo não existe.')
-  return 'homePlayerId' in match
+  return isKnockoutMatch(match)
     ? { players: [match.homePlayerId, match.awayPlayerId], result: match.result }
     : { players: [match.player1Id, match.player2Id], result: match.result }
 }

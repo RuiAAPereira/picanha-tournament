@@ -86,7 +86,7 @@ function describeBody(candidate: Candidate): string {
   const groups = plural(candidate.groupCount, 'grupo', 'grupos') + ` de ${candidate.groupSize}`
   const preliminary = matchCount === 0
     ? ''
-    : `, após ${plural(matchCount, 'pré-eliminatória', 'pré-eliminatórias')} com ${matchCount * 2} jogadores sorteados; ${matchCount} vencedor${matchCount === 1 ? ' avança' : 'es avançam'} para os grupos`
+    : `, após ${plural(matchCount, 'pré-eliminatória', 'pré-eliminatórias')} com ${matchCount * 2} jogadores sorteados; ${matchCount} vencedor${matchCount === 1 ? ' avança' : 'es avançam'} para ${candidate.groupCount === 1 ? 'o grupo' : 'os grupos'}`
   return `${groups}${preliminary}, com ${describeFinal(candidate)}.`
 }
 
@@ -100,7 +100,13 @@ function describeWhyRecommended(top: Candidate, all: Candidate[], preferredGroup
     }
   }
   if (top.groupSize === preferredGroupSize) why.push('tamanho de grupo preferido')
-  else if (matchCount > 0) why.push('tamanho de grupo mais próximo do preferido')
+  else if (matchCount > 0) {
+    // With a preferred size of 4, groups of 3 and 5 are equally close.
+    const mirror = 2 * preferredGroupSize - top.groupSize
+    why.push(mirror >= 3 && mirror <= 5
+      ? 'um dos tamanhos de grupo mais próximos do preferido'
+      : 'tamanho de grupo mais próximo do preferido')
+  }
   if (matchCount > 0 && all.every(candidate => matchesOf(candidate) >= matchCount)) why.push('menor número de pré-eliminatórias')
   return why.join('; ')
 }

@@ -496,6 +496,34 @@ fn storage_export_rejects_destinations_outside_backup_folder() {
 }
 
 #[test]
+fn storage_export_rejects_file_names_windows_would_alter() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let storage = open(exe_dir.path());
+    storage.save(&snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]))).unwrap();
+    let candidates = [
+        "copia.sqlite:ads",
+        "copia*.sqlite",
+        "copia?.sqlite",
+        "copia\".sqlite",
+        "copia<1>.sqlite",
+        "copia|.sqlite",
+        "copia\u{1}.sqlite",
+        "copia.sqlite.",
+        "copia.sqlite ",
+        "setembro./copia.sqlite",
+        "setembro /copia.sqlite",
+    ];
+
+    for destination in candidates {
+        let err = storage.export_backup("t-1", Path::new(destination)).unwrap_err();
+        assert_eq!(err.code, StorageErrorCode::InvalidDestination, "destination {destination:?}");
+        assert_no_path_in_message(&err.message, exe_dir.path());
+    }
+
+    assert!(dir_entries(&backups_dir(exe_dir.path())).is_empty());
+}
+
+#[test]
 fn storage_export_rejects_unknown_tournament_without_writing() {
     let exe_dir = tempfile::tempdir().unwrap();
     let storage = open(exe_dir.path());

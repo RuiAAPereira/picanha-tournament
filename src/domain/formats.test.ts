@@ -158,6 +158,20 @@ describe('proposeFormats', () => {
     expect(ready(16).some(proposal => /exige 4 pré-eliminatórias/.test(proposal.reason))).toBe(true)
   })
 
+  it('sends a preliminary winner to "o grupo" when there is only one group', () => {
+    const single = ready(5).find(proposal => proposal.groupCount === 1 && matchesOf(proposal) === 1)!
+    expect(single.reason).toMatch(/1 vencedor avança para o grupo,/)
+    expect(ready(13)[0].reason).toMatch(/1 vencedor avança para os grupos,/)
+  })
+
+  it('says "um dos tamanhos mais próximos" when groups of 3 and 5 are equally close', () => {
+    expect(ready(7, 4)[0].reason).toMatch(/^Recomendado \(um dos tamanhos de grupo mais próximos do preferido;/)
+    expect(ready(7, 3)[0].reason).not.toMatch(/mais próximo/)
+    const nearest = ready(7, 5)[0]
+    expect(nearest.groupSize).toBe(3)
+    expect(nearest.reason).toMatch(/\(tamanho de grupo mais próximo do preferido;/)
+  })
+
   it('ranks clean formats before preliminary ones', () => {
     expect(ready(6)[0]).toMatchObject({ groupSize: 3, groupCount: 2, preliminaryRound: undefined })
     expect(ready(9)[0]).toMatchObject({ groupSize: 3, groupCount: 3, preliminaryRound: undefined })
@@ -259,6 +273,10 @@ describe('createRoundRobinFixtures', () => {
     for (let round = 0; round < 3; round++) {
       const [first, second] = fixtures.slice(round * 2, round * 2 + 2)
       expect(new Set([first.player1Id, first.player2Id, second.player1Id, second.player2Id]).size).toBe(4)
+    }
+    for (const boundary of [1, 3]) {
+      const [last, next] = [fixtures[boundary], fixtures[boundary + 1]]
+      expect(new Set([last.player1Id, last.player2Id, next.player1Id, next.player2Id]).size).toBe(3)
     }
     for (let index = 0; index + 2 < fixtures.length; index++) {
       const window = fixtures.slice(index, index + 3)

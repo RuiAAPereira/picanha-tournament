@@ -278,8 +278,22 @@ impl Storage {
         if resolved == normalize_lexically(&self.db_path) {
             return Err(invalid("is the live database"));
         }
+        let below_base = resolved.strip_prefix(&base).map_err(|_| invalid("outside the backups folder"))?;
+        if below_base.components().any(|component| !is_portable_name(component.as_os_str())) {
+            return Err(invalid("name Windows would alter"));
+        }
         Ok(resolved)
     }
+}
+
+/// A name Windows stores as written: no reserved characters (`:` would open an
+/// alternate data stream), no control characters, no trailing dot or space.
+/// The check is lexical; links and junctions are deliberately not followed.
+fn is_portable_name(name: &std::ffi::OsStr) -> bool {
+    let Some(name) = name.to_str() else { return false };
+    !name.is_empty()
+        && !name.ends_with(['.', ' '])
+        && !name.chars().any(|c| c.is_control() || matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
 }
 
 /// Resolves `.` and `..` without touching the filesystem (the target may not exist yet).
