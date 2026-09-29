@@ -58,12 +58,15 @@ describe('startup', () => {
     expect(screen.getByRole('button', { name: 'Novo torneio' })).toBeEnabled()
   })
 
-  it('loads the demonstration only when one is provided', async () => {
+  it('loads the demonstration only when one is provided, as a new tournament each time', async () => {
     const repository = fakeRepository()
     const { user } = renderOperator('#/operator', { repository, demo: fourPlayerState })
     await user.click(await screen.findByRole('button', { name: 'Carregar demonstração' }))
     expect(await screen.findByRole('heading', { name: 'Grupo A' })).toBeVisible()
-    expect(repository.save).toHaveBeenCalledWith(expect.objectContaining({ tournamentId: 'torneio-20260928-200000' }))
+    // A fresh id keeps a reloaded demo from rewriting the saved history of an earlier one.
+    await vi.waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1))
+    expect(repository.save.mock.calls[0][0]).toMatchObject({ tournamentId: 'torneio-20260928-201530' })
+    expect(repository.save.mock.calls[0][0].state.id).toBe('torneio-20260928-201530')
   })
 })
 

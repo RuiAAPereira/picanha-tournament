@@ -195,7 +195,9 @@ export function TournamentProvider(props: TournamentProviderProps) {
       if (!demo) return
       setupRef.current = null
       setSetup(null)
-      commit(demo())
+      // A fresh id: reloading the demo must not rewrite the saved history of an earlier run.
+      const loaded = demo()
+      commit({ ...loaded, id: tournamentIdFor(loaded.name, deps.current.now()) })
     },
     async openPresentation() {
       try {
