@@ -165,6 +165,7 @@ describe('presentation updates', () => {
     const repository = fakeRepository()
     const session = renderSession(repository, fourPlayerState(), { presentation })
     await ready(session)
+    await act(() => session.current!.openPresentation())
     act(() => session.current!.recordResult(firstResult(session.current!)))
     expect(session.current!.state!.auditLog).toHaveLength(1)
     await vi.waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1))

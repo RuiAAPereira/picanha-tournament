@@ -27,6 +27,9 @@ export type TournamentSession = {
   storageAvailable: boolean
   notice: Notice | null
   canLoadDemo: boolean
+  /** The TV window opened at least once in this session; its private controls are shown from then on. */
+  presentationOpen: boolean
+  presentationMuted: boolean
   createTournament(setup: TournamentSetup): void
   /** Draws the pending setup, creates the tournament and saves it. */
   confirmDraw(): void
@@ -37,6 +40,9 @@ export type TournamentSession = {
   resolveTie(scope: TieScope): void
   loadDemo(): void
   openPresentation(): Promise<void>
+  /** Completes the reveal running on the TV at once. */
+  skipPresentation(): void
+  togglePresentationMuted(): void
   exportBackup(): Promise<void>
   resumeCurrent(): Promise<void>
   retrySave(): Promise<void>

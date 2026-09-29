@@ -20,6 +20,14 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
         </nav>
         <div className="actions">
           <button type="button" onClick={() => void session.openPresentation()}>Apresentar</button>
+          {session.presentationOpen && (
+            <>
+              <button type="button" onClick={session.skipPresentation}>Saltar</button>
+              <button type="button" onClick={session.togglePresentationMuted}>
+                {session.presentationMuted ? 'Ativar som' : 'Silenciar'}
+              </button>
+            </>
+          )}
           {state && <button type="button" onClick={() => void session.exportBackup()}>Exportar cópia de segurança</button>}
         </div>
       </header>

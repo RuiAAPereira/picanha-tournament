@@ -4,6 +4,7 @@ import {
   applyMatchResult, correctionImpact, correctMatchResult, createTournamentState, resolveTieDraw,
   type TieScope, type TournamentState,
 } from '../domain/tournament'
+import { createTauriPresentationController } from '../platform/presentation'
 import type { PresentationPort, SessionEvent } from '../platform/presentationPort'
 import { createTauriTournamentRepository, type TournamentRepository } from '../platform/tournamentRepository'
 import { backupFileName, claimUniqueId, tournamentIdFor } from './slugs'
@@ -32,6 +33,9 @@ const NO_TOURNAMENT = 'Não há torneio em curso.'
 
 const unavailablePresentation: PresentationPort = { open: () => Promise.reject(new Error(PRESENTATION_UNAVAILABLE)) }
 const isoNow = () => new Date().toISOString()
+/** The real TV window under Tauri; the unavailable stub in a plain browser. */
+const defaultPresentation = (): PresentationPort =>
+  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window ? createTauriPresentationController() : unavailablePresentation
 
 type Deps = {
   repository: TournamentRepository
@@ -43,6 +47,7 @@ type Deps = {
 
 export function TournamentProvider(props: TournamentProviderProps) {
   const [fallbackRepository] = useState(() => createTauriTournamentRepository())
+  const [fallbackPresentation] = useState(defaultPresentation)
   // Written during render on purpose: the stable actions below always read the latest injected
   // dependencies without being recreated (and without changing the context value).
   const deps = useRef<Deps>(null!)
@@ -50,7 +55,7 @@ export function TournamentProvider(props: TournamentProviderProps) {
     repository: props.repository ?? fallbackRepository,
     now: props.now ?? isoNow,
     random: props.random ?? Math.random,
-    presentation: props.presentation ?? unavailablePresentation,
+    presentation: props.presentation ?? fallbackPresentation,
     demo: props.demo,
   }
 
@@ -60,6 +65,8 @@ export function TournamentProvider(props: TournamentProviderProps) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
+  const [presentationOpen, setPresentationOpen] = useState(false)
+  const [presentationMuted, setPresentationMuted] = useState(false)
 
   // Created once: `actions` may only call autosave's stable methods, never read its state fields,
   // which would stay frozen at their first-render values here.
@@ -71,6 +78,9 @@ export function TournamentProvider(props: TournamentProviderProps) {
     let commits = 0
     /** Stored ids plus every id handed out in this session. */
     const takenIds = new Set<string>()
+    /** Set by the first successful open: before that, a TV that cannot take updates is not news. */
+    let presentationOpened = false
+    let muted = false
 
     const requireState = () => {
       if (!current) throw new Error(NO_TOURNAMENT)
@@ -80,7 +90,15 @@ export function TournamentProvider(props: TournamentProviderProps) {
     const newId = (name: string, at: string) => claimUniqueId(tournamentIdFor(name, at), takenIds)
     const warnPresentation = (error: unknown) => {
       console.error('[presentation]', error)
-      setNotice({ tone: 'warning', text: PRESENTATION_OUT_OF_DATE })
+      if (presentationOpened) setNotice({ tone: 'warning', text: PRESENTATION_OUT_OF_DATE })
+    }
+    /** Runs an optional TV call; a failure only warns. */
+    function tellPresentation(send: ((presentation: PresentationPort) => Promise<void> | undefined)) {
+      try {
+        send(deps.current.presentation)?.catch(warnPresentation)
+      } catch (error) {
+        warnPresentation(error)
+      }
     }
 
     function clearSetup() {
@@ -94,13 +112,8 @@ export function TournamentProvider(props: TournamentProviderProps) {
       takenIds.add(next.id)
       setState(next)
       void autosave.persist(next)
-      const { presentation } = deps.current
-      if (!presentation.publish) return
-      try {
-        presentation.publish(next, event).catch(warnPresentation)
-      } catch (error) {
-        warnPresentation(error)
-      }
+      // Published even before the TV opens: the app keeps the latest state for the window to read.
+      tellPresentation(presentation => presentation.publish?.(next, event))
     }
 
     async function resumeCurrent() {
@@ -171,12 +184,22 @@ export function TournamentProvider(props: TournamentProviderProps) {
       async openPresentation() {
         try {
           await deps.current.presentation.open()
+          presentationOpened = true
+          setPresentationOpen(true)
         } catch (error) {
           // A missing or closed display never stops the tournament; only the known message is shown as is.
           const unavailable = error instanceof Error && error.message === PRESENTATION_UNAVAILABLE
           if (!unavailable) console.error('[presentation]', error)
           setNotice({ tone: 'warning', text: unavailable ? PRESENTATION_UNAVAILABLE : PRESENTATION_FAILED })
         }
+      },
+      skipPresentation() {
+        tellPresentation(presentation => presentation.skip?.())
+      },
+      togglePresentationMuted() {
+        muted = !muted
+        setPresentationMuted(muted)
+        tellPresentation(presentation => presentation.setMuted?.(muted))
       },
       async exportBackup() {
         // The backup copies what is stored: let a running save finish and retry a failed one first.
@@ -215,8 +238,12 @@ export function TournamentProvider(props: TournamentProviderProps) {
   const { saveStatus, storageError, storageAvailable } = autosave
   const canLoadDemo = !!props.demo
   const session = useMemo((): TournamentSession => ({
-    state, setup, loading, loadError, saveStatus, storageError, storageAvailable, notice, canLoadDemo, ...actions,
-  }), [state, setup, loading, loadError, saveStatus, storageError, storageAvailable, notice, canLoadDemo, actions])
+    state, setup, loading, loadError, saveStatus, storageError, storageAvailable, notice, canLoadDemo,
+    presentationOpen, presentationMuted, ...actions,
+  }), [
+    state, setup, loading, loadError, saveStatus, storageError, storageAvailable, notice, canLoadDemo,
+    presentationOpen, presentationMuted, actions,
+  ])
 
   return <TournamentSessionContext.Provider value={session}>{props.children}</TournamentSessionContext.Provider>
 }

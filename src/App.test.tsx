@@ -15,10 +15,11 @@ it('renders the operator shell', async () => {
   expect(await screen.findByRole('button', { name: 'Novo torneio' })).toBeEnabled()
 })
 
-it('renders a read-only presentation placeholder', () => {
+it('renders the read-only presentation, with only a mute button', async () => {
   window.location.hash = '#/presentation'
   render(<App />)
   expect(screen.getByRole('main', { name: /apresentação/i })).toBeVisible()
+  expect(await screen.findByRole('heading', { name: 'Picanha Tournament' })).toBeVisible()
   expect(screen.queryByRole('main', { name: /torneio/i })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['Silenciar'])
 })

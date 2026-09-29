@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "operator",
+  "description": "The operator window. It opens the presentation window only through the app's own open_presentation_window command.",
+  "windows": ["operator"],
+  "permissions": ["core:default"]
+}
