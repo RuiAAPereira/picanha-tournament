@@ -164,8 +164,12 @@ describe('proposeFormats', () => {
     expect(ready(13)[0].reason).toMatch(/1 vencedor avança para os grupos,/)
   })
 
-  it('says "um dos tamanhos mais próximos" when groups of 3 and 5 are equally close', () => {
-    expect(ready(7, 4)[0].reason).toMatch(/^Recomendado \(um dos tamanhos de grupo mais próximos do preferido;/)
+  it('says "um dos tamanhos mais próximos" only when groups of 3 and 5 are both offered', () => {
+    const both = ready(11, 4)
+    expect(both.map(proposal => proposal.groupSize)).toEqual(expect.arrayContaining([3, 5]))
+    expect(both[0].reason).toMatch(/^Recomendado \(um dos tamanhos de grupo mais próximos do preferido;/)
+    expect(ready(7, 4).every(proposal => proposal.groupSize === 3)).toBe(true)
+    expect(ready(7, 4)[0].reason).toMatch(/^Recomendado \(tamanho de grupo mais próximo do preferido;/)
     expect(ready(7, 3)[0].reason).not.toMatch(/mais próximo/)
     const nearest = ready(7, 5)[0]
     expect(nearest.groupSize).toBe(3)

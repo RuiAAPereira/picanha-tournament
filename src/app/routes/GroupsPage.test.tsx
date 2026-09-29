@@ -40,6 +40,8 @@ describe('GroupsPage', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Confirmar resultado' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // The button that opened the dialog is gone, so focus lands on the page heading, not on body.
+    expect(screen.getByRole('heading', { name: 'Grupos' })).toHaveFocus()
     const played = screen.getByRole('region', { name: 'Jogos concluídos' })
     expect(within(played).getByText(/Ana venceu; Bruno deixou 2 bolas/)).toBeVisible()
     await vi.waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1))

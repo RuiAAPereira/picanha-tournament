@@ -8,6 +8,7 @@ import {
 } from '../platform/tournamentRepository'
 import OperatorApp from './OperatorApp'
 import { TournamentProvider, type TournamentProviderProps } from './TournamentProvider'
+import { useTournamentSession, type TournamentSession } from './useTournamentSession'
 
 export const NOW = '2026-09-28T20:15:30.000Z'
 
@@ -72,12 +73,24 @@ export const snapshotOf = (state: TournamentState): TournamentSnapshot => ({
   state,
 })
 
-export function deferred() {
-  let resolve!: () => void
+export function deferred<T = void>() {
+  let resolve!: (value: T) => void
   let reject!: (error: unknown) => void
-  const promise = new Promise<void>((onResolve, onReject) => {
+  const promise = new Promise<T>((onResolve, onReject) => {
     resolve = onResolve
     reject = onReject
   })
   return { promise, resolve, reject }
+}
+
+/** Renders the provider with a probe; `state`, when given, is what the repository loads. */
+export function renderSession(repository: FakeRepository, state: TournamentState | null, props: OperatorProps = {}) {
+  const session: { current: TournamentSession | null } = { current: null }
+  function Probe() {
+    session.current = useTournamentSession()
+    return null
+  }
+  if (state) repository.loadCurrent.mockResolvedValue(snapshotOf(state))
+  render(<TournamentProvider now={() => NOW} random={() => 0} {...props} repository={repository}><Probe /></TournamentProvider>)
+  return session
 }

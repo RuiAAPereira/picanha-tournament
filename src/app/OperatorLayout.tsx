@@ -10,7 +10,7 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
   const { state, notice, saveStatus, storageError, storageAvailable } = session
 
   return (
-    <main aria-label="Torneio" className="operator">
+    <main aria-label="Torneio" className="operator operator-page">
       <header className="operator-header">
         <h1>Picanha Tournament</h1>
         <nav aria-label="Secções">
@@ -22,8 +22,16 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
           <button type="button" onClick={() => void session.openPresentation()}>Apresentar</button>
           {state && <button type="button" onClick={() => void session.exportBackup()}>Exportar cópia de segurança</button>}
         </div>
-        {state && <p role="status" className="save-status">{SAVE_LABELS[saveStatus]}</p>}
       </header>
+
+      {/* Always present, so screen readers announce what is added: save progress and info notices. */}
+      <div className="status-line">
+        <div role="status">
+          {state && <span className="save-status">{SAVE_LABELS[saveStatus]}</span>}
+          {notice?.tone === 'info' && <span className="banner info">{notice.text}</span>}
+        </div>
+        {notice?.tone === 'info' && <button type="button" onClick={session.dismissNotice}>Fechar aviso</button>}
+      </div>
 
       {saveStatus === 'error' && (
         <div role="alert" className="banner error">
@@ -34,8 +42,8 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
       {saveStatus !== 'error' && !storageAvailable && storageError && (
         <p role="alert" className="banner warning">{storageError}</p>
       )}
-      {notice && (
-        <div className={`banner ${notice.tone}`} role={notice.tone === 'warning' ? 'alert' : 'status'}>
+      {notice?.tone === 'warning' && (
+        <div className="banner warning" role="alert">
           <p>{notice.text}</p>
           <button type="button" onClick={session.dismissNotice}>Fechar aviso</button>
         </div>

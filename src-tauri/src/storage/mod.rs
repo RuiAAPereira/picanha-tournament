@@ -287,13 +287,24 @@ impl Storage {
 }
 
 /// A name Windows stores as written: no reserved characters (`:` would open an
-/// alternate data stream), no control characters, no trailing dot or space.
+/// alternate data stream), no control characters, no trailing dot or space,
+/// and no device name (`CON`, `NUL`, `COM1`…, with or without an extension).
 /// The check is lexical; links and junctions are deliberately not followed.
 fn is_portable_name(name: &std::ffi::OsStr) -> bool {
     let Some(name) = name.to_str() else { return false };
     !name.is_empty()
         && !name.ends_with(['.', ' '])
         && !name.chars().any(|c| c.is_control() || matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        && !is_device_name(name)
+}
+
+fn is_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end().to_ascii_uppercase();
+    match stem.as_bytes() {
+        b"CON" | b"PRN" | b"AUX" | b"NUL" => true,
+        [b'C', b'O', b'M', digit] | [b'L', b'P', b'T', digit] => (b'1'..=b'9').contains(digit),
+        _ => false,
+    }
 }
 
 /// Resolves `.` and `..` without touching the filesystem (the target may not exist yet).

@@ -24,7 +24,7 @@ export default function NewTournamentPage() {
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [choice, setChoice] = useState(() => ({ count: players.length, index: initialChoice(session.setup?.proposal) }))
-  const ids = { name: useId(), player: useId(), playerError: useId(), reason: useId() }
+  const ids = { name: useId(), formError: useId(), player: useId(), playerError: useId(), reason: useId() }
 
   const proposals = proposeFormats(players.length)
   const [top] = proposals
@@ -62,7 +62,17 @@ export default function NewTournamentPage() {
       <h2 id="new-title">Novo torneio</h2>
       <form onSubmit={create} noValidate>
         <label htmlFor={ids.name}>Nome do torneio</label>
-        <input id={ids.name} value={name} required onChange={event => setName(event.target.value)} />
+        <input
+          id={ids.name}
+          value={name}
+          required
+          aria-invalid={!!formError}
+          aria-describedby={formError ? ids.formError : undefined}
+          onChange={event => {
+            setName(event.target.value)
+            setFormError(null)
+          }}
+        />
 
         <h3>Inscrições</h3>
         <div className="inline">
@@ -94,24 +104,27 @@ export default function NewTournamentPage() {
           ))}
         </ol>
 
-        <section aria-labelledby="recommended-title">
-          <h3 id="recommended-title">Formato recomendado</h3>
-          {ready.length > 1 ? (
-            <FormatChoice proposal={ready[0]} index={0} label="Recomendado" chosen={chosenIndex} reasonId={ids.reason}
-              onChoose={index => setChoice({ count: players.length, index })} />
-          ) : <p>{top.reason}</p>}
-        </section>
-        {ready.length > 1 && (
-          <section aria-labelledby="alternatives-title">
-            <h3 id="alternatives-title">Alternativas</h3>
-            {ready.slice(1).map((proposal, offset) => (
-              <FormatChoice key={offset} proposal={proposal} index={offset + 1} label={`Alternativa ${offset + 1}`}
-                chosen={chosenIndex} reasonId={ids.reason} onChoose={index => setChoice({ count: players.length, index })} />
-            ))}
+        <fieldset>
+          <legend>Formato</legend>
+          <section aria-labelledby="recommended-title">
+            <h3 id="recommended-title">Formato recomendado</h3>
+            {ready.length > 1 ? (
+              <FormatChoice proposal={ready[0]} index={0} label="Recomendado" chosen={chosenIndex} reasonId={ids.reason}
+                onChoose={index => setChoice({ count: players.length, index })} />
+            ) : <p>{top.reason}</p>}
           </section>
-        )}
+          {ready.length > 1 && (
+            <section aria-labelledby="alternatives-title">
+              <h3 id="alternatives-title">Alternativas</h3>
+              {ready.slice(1).map((proposal, offset) => (
+                <FormatChoice key={offset} proposal={proposal} index={offset + 1} label={`Alternativa ${offset + 1}`}
+                  chosen={chosenIndex} reasonId={ids.reason} onChoose={index => setChoice({ count: players.length, index })} />
+              ))}
+            </section>
+          )}
+        </fieldset>
 
-        {formError && <p role="alert" className="error">{formError}</p>}
+        {formError && <p id={ids.formError} role="alert" className="error">{formError}</p>}
         <div className="actions">
           <a href={ROUTES.home}>Voltar</a>
           <button type="submit" className="primary" disabled={top.creationBlocked}>Criar e sortear</button>

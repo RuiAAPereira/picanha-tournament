@@ -1,12 +1,8 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { TournamentState } from '../domain/tournament'
-import type { TournamentSnapshot } from '../platform/tournamentRepository'
 import {
-  NOW, deferred, fakeRepository, fourPlayerState, playGroups, renderOperator, snapshotOf,
+  NOW, deferred, fakeRepository, fourPlayerState, playGroups, renderOperator, renderSession, snapshotOf,
 } from './testSupport'
-import { TournamentProvider } from './TournamentProvider'
-import { useTournamentSession, type TournamentSession } from './useTournamentSession'
 
 afterEach(() => {
   window.location.hash = ''
@@ -180,14 +176,3 @@ describe('presentation and export', () => {
     expect(await screen.findByText(/não foi possível exportar a cópia de segurança/i)).toBeVisible()
   })
 })
-
-function renderSession(repository: ReturnType<typeof fakeRepository>, state: TournamentState) {
-  const session: { current: TournamentSession | null } = { current: null }
-  function Probe() {
-    session.current = useTournamentSession()
-    return null
-  }
-  repository.loadCurrent.mockResolvedValue(snapshotOf(state) satisfies TournamentSnapshot)
-  render(<TournamentProvider repository={repository} now={() => NOW} random={() => 0}><Probe /></TournamentProvider>)
-  return session
-}

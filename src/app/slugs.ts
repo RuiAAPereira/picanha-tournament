@@ -16,5 +16,13 @@ function stamp(at: string): string {
 
 export const tournamentIdFor = (name: string, at: string) => `${slugify(name) || 'torneio'}-${stamp(at)}`
 
+/** `base`, or `base-2`, `base-3`… when taken; the chosen id is added to `taken`. */
+export function claimUniqueId(base: string, taken: Set<string>): string {
+  let id = base
+  for (let suffix = 2; taken.has(id); suffix++) id = `${base}-${suffix}`
+  taken.add(id)
+  return id
+}
+
 /** A bare file name; the storage layer resolves it inside `data/backups`. */
 export const backupFileName = (name: string, at: string) => `${tournamentIdFor(name, at)}.sqlite`

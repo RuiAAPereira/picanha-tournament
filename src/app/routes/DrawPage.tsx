@@ -27,7 +27,7 @@ export default function DrawPage() {
         {error && <p role="alert" className="error">{error}</p>}
         <div className="actions">
           <a href={ROUTES.newTournament}>Voltar</a>
-          <button type="button" className="primary" onClick={draw}>Sortear</button>
+          <button type="button" className="primary" disabled={session.loading} onClick={draw}>Sortear</button>
         </div>
       </section>
     )

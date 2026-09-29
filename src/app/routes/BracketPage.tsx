@@ -1,7 +1,7 @@
 import MatchItem from '../components/MatchItem'
 import { useResultFlow } from '../components/useResultFlow'
 import { ROUTES } from '../hashRoute'
-import { playerName, roundName } from '../labels'
+import { championId, playerName, roundName } from '../labels'
 import { useTournamentSession } from '../useTournamentSession'
 import NoTournament from './NoTournament'
 
@@ -12,7 +12,7 @@ export default function BracketPage() {
   if (!state) return <NoTournament />
 
   const { rounds } = state.bracket
-  const champion = rounds.at(-1)?.matches[0]?.result?.winnerId
+  const champion = championId(state)
 
   return (
     <section aria-labelledby="bracket-title">

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { findMatch, isKnockoutMatch, type TournamentPlayer, type TournamentState } from '../../domain/tournament'
 import type { MatchId } from '../../domain/types'
 import { matchLabel } from '../labels'
@@ -26,6 +26,13 @@ export function useResultFlow(): ResultFlow & { dialogs: ReactNode } {
   const [pending, setPending] = useState<PendingCorrection | null>(null)
   const { state } = session
   const players = state && editing ? playersOf(state, editing.matchId) : null
+  // The button that opened the flow; the confirmation step returns focus there too, while it exists.
+  const opener = useRef<HTMLElement | null>(null)
+  const returnFocus = () => (opener.current?.isConnected ? opener.current : null)
+  const open = (next: Editing) => {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setEditing(next)
+  }
 
   function confirm(entry: ResultEntry) {
     if (editing?.mode === 'record') {
@@ -49,6 +56,7 @@ export function useResultFlow(): ResultFlow & { dialogs: ReactNode } {
           initial={state ? findMatch(state, editing.matchId)?.result : undefined}
           onConfirm={confirm}
           onCancel={() => setEditing(null)}
+          returnFocus={returnFocus}
         />
       )}
       {pending && (
@@ -59,14 +67,15 @@ export function useResultFlow(): ResultFlow & { dialogs: ReactNode } {
             setPending(null)
           }}
           onCancel={() => setPending(null)}
+          returnFocus={returnFocus}
         />
       )}
     </>
   )
 
   return {
-    record: matchId => setEditing({ matchId, mode: 'record' }),
-    correct: matchId => setEditing({ matchId, mode: 'correct' }),
+    record: matchId => open({ matchId, mode: 'record' }),
+    correct: matchId => open({ matchId, mode: 'correct' }),
     dialogs,
   }
 }

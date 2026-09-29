@@ -7,6 +7,10 @@ const ROUND_NAMES = ['Final', 'Meias-finais', 'Quartos-de-final', 'Oitavos-de-fi
 export const playerName = (state: TournamentState, playerId: PlayerId) =>
   state.players.find(player => player.id === playerId)?.displayName ?? playerId
 
+/** The final's winner, once the final has a result; the tournament is finished then. */
+export const championId = (state: TournamentState): PlayerId | null =>
+  state.bracket.rounds.at(-1)?.matches[0]?.result?.winnerId ?? null
+
 export function roundName(state: TournamentState, round: number): string {
   return ROUND_NAMES[state.bracket.rounds.length - round] ?? `Ronda ${round}`
 }

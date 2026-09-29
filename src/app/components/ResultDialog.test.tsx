@@ -9,8 +9,9 @@ function renderDialog(props: Partial<Parameters<typeof ResultDialog>[0]> = {}) {
   const onConfirm = vi.fn()
   const onCancel = vi.fn()
   const user = userEvent.setup()
-  render(<ResultDialog matchId="group-A-1-2" players={[...players]} onConfirm={onConfirm} onCancel={onCancel} {...props} />)
-  return { user, onConfirm, onCancel }
+  const rendered = render(
+    <ResultDialog matchId="group-A-1-2" players={[...players]} onConfirm={onConfirm} onCancel={onCancel} {...props} />)
+  return { user, onConfirm, onCancel, ...rendered }
 }
 
 describe('ResultDialog', () => {
@@ -62,7 +63,18 @@ describe('ResultDialog', () => {
     await user.type(screen.getByLabelText(/bolas deixadas pelo derrotado/i), '8')
     await user.click(screen.getByRole('button', { name: /confirmar resultado/i }))
     expect(screen.getByRole('alert')).toHaveTextContent('As bolas deixadas têm de ser um número inteiro de 0 a 7.')
+    const balls = screen.getByLabelText(/bolas deixadas pelo derrotado/i)
+    expect(balls).toHaveAttribute('aria-invalid', 'true')
+    expect(balls).toHaveAccessibleDescription('As bolas deixadas têm de ser um número inteiro de 0 a 7.')
     expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('makes the page behind it inert while open', () => {
+    const { container, unmount } = renderDialog()
+    expect(container).toHaveAttribute('inert')
+    expect(screen.getByRole('dialog').closest('[inert]')).toBeNull()
+    unmount()
+    expect(container).not.toHaveAttribute('inert')
   })
 
   it('shows a rule error from the tournament inline and stays open', async () => {

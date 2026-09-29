@@ -35,14 +35,16 @@ export default function GroupsPage() {
   return (
     <section aria-labelledby="groups-title">
       <h2 id="groups-title">Grupos</h2>
-      {ties.length > 0 && (
-        <div className="banner warning">
-          <p>Há empates que só se resolvem por sorteio.</p>
-          {ties.map(scope => (
-            <button key={tieLabel(scope)} type="button" onClick={() => resolve(scope)}>{tieLabel(scope)}</button>
-          ))}
-        </div>
-      )}
+      <div aria-live="polite">
+        {ties.length > 0 && (
+          <div className="banner warning">
+            <p>Há empates que só se resolvem por sorteio.</p>
+            {ties.map(scope => (
+              <button key={tieLabel(scope)} type="button" onClick={() => resolve(scope)}>{tieLabel(scope)}</button>
+            ))}
+          </div>
+        )}
+      </div>
       {tieError && <p role="alert" className="error">{tieError}</p>}
 
       {state.preliminaryMatches.length > 0 && (

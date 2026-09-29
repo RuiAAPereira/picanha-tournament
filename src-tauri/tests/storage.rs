@@ -524,6 +524,25 @@ fn storage_export_rejects_file_names_windows_would_alter() {
 }
 
 #[test]
+fn storage_export_rejects_reserved_device_names() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let storage = open(exe_dir.path());
+    storage.save(&snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]))).unwrap();
+
+    for destination in ["CON", "con.sqlite", "Nul.sqlite", "aux", "prn.tar.sqlite", "com1.sqlite", "LPT9.sqlite", "com1/copia.sqlite"] {
+        let err = storage.export_backup("t-1", Path::new(destination)).unwrap_err();
+        assert_eq!(err.code, StorageErrorCode::InvalidDestination, "destination {destination:?}");
+        assert_no_path_in_message(&err.message, exe_dir.path());
+    }
+    assert!(dir_entries(&backups_dir(exe_dir.path())).is_empty());
+
+    storage.export_backup("t-1", Path::new("consola.sqlite")).unwrap();
+    storage.export_backup("t-1", Path::new("com10.sqlite")).unwrap();
+    assert!(backups_dir(exe_dir.path()).join("consola.sqlite").is_file());
+    assert!(backups_dir(exe_dir.path()).join("com10.sqlite").is_file());
+}
+
+#[test]
 fn storage_export_rejects_unknown_tournament_without_writing() {
     let exe_dir = tempfile::tempdir().unwrap();
     let storage = open(exe_dir.path());

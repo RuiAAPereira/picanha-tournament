@@ -101,9 +101,9 @@ function describeWhyRecommended(top: Candidate, all: Candidate[], preferredGroup
   }
   if (top.groupSize === preferredGroupSize) why.push('tamanho de grupo preferido')
   else if (matchCount > 0) {
-    // With a preferred size of 4, groups of 3 and 5 are equally close.
+    // With a preferred size of 4, groups of 3 and 5 are equally close; say so only when both are offered.
     const mirror = 2 * preferredGroupSize - top.groupSize
-    why.push(mirror >= 3 && mirror <= 5
+    why.push(mirror !== top.groupSize && all.some(candidate => candidate.groupSize === mirror)
       ? 'um dos tamanhos de grupo mais próximos do preferido'
       : 'tamanho de grupo mais próximo do preferido')
   }

@@ -1,19 +1,58 @@
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
 
-type ModalProps = { title: string; onCancel(): void; children: ReactNode }
+type ModalProps = {
+  title: string
+  onCancel(): void
+  children: ReactNode
+  /** Where focus goes on close; defaults to the element that had focus when the modal opened. */
+  returnFocus?: () => HTMLElement | null
+}
 
-/** Modal shell: labelled by its title, takes focus, keeps Tab inside, Escape cancels, focus returns on close. */
-export default function Modal({ title, onCancel, children }: ModalProps) {
+/** The page heading takes focus when the element to return to is gone. */
+function pageHeading(): HTMLElement | null {
+  const heading = document.querySelector<HTMLElement>('main h2')
+  if (heading) heading.tabIndex = -1
+  return heading
+}
+
+/**
+ * Modal shell rendered beside the app root: labelled by its title, the rest of the page is inert, focus
+ * moves in and stays inside, Escape cancels, and focus returns on close.
+ */
+export default function Modal({ title, onCancel, children, returnFocus }: ModalProps) {
   const titleId = useId()
   const dialog = useRef<HTMLDivElement>(null)
+  const [host] = useState(() => {
+    const element = document.createElement('div')
+    element.className = 'operator'
+    return element
+  })
+  const returnFocusRef = useRef(returnFocus)
+  returnFocusRef.current = returnFocus
+
+  useLayoutEffect(() => {
+    document.body.appendChild(host)
+    const background = [...document.body.children].filter(element => element !== host && !element.hasAttribute('inert'))
+    background.forEach(element => element.setAttribute('inert', ''))
+    return () => {
+      background.forEach(element => element.removeAttribute('inert'))
+      host.remove()
+    }
+  }, [host])
 
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null
+    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+      ? document.activeElement
+      : null
     const first = dialog.current?.querySelector<HTMLElement>(FOCUSABLE)
     ;(first ?? dialog.current)?.focus()
-    return () => opener?.focus()
+    return () => {
+      const target = returnFocusRef.current?.() ?? (opener?.isConnected ? opener : pageHeading())
+      target?.focus()
+    }
   }, [])
 
   function onKeyDown(event: KeyboardEvent) {
@@ -35,7 +74,7 @@ export default function Modal({ title, onCancel, children }: ModalProps) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="modal-backdrop">
       <div
         ref={dialog}
@@ -49,6 +88,7 @@ export default function Modal({ title, onCancel, children }: ModalProps) {
         <h2 id={titleId}>{title}</h2>
         {children}
       </div>
-    </div>
+    </div>,
+    host,
   )
 }

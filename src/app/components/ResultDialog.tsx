@@ -14,35 +14,38 @@ type ResultDialogProps = {
   /** A thrown error is shown inline and keeps the dialog open. */
   onConfirm(entry: ResultEntry): void | Promise<void>
   onCancel(): void
+  returnFocus?: () => HTMLElement | null
 }
 
-export default function ResultDialog({ matchId, players, mode = 'record', initial, onConfirm, onCancel }: ResultDialogProps) {
+type DialogError = { field: 'winner' | 'balls' | null; text: string }
+
+export default function ResultDialog({ matchId, players, mode = 'record', initial, onConfirm, onCancel, returnFocus }: ResultDialogProps) {
   const [winnerId, setWinnerId] = useState(initial?.winnerId ?? '')
   const [balls, setBalls] = useState(initial?.kind === 'played' ? String(initial.loserBallsRemaining) : '')
   const [withdrawal, setWithdrawal] = useState(initial?.kind === 'withdrawal')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<DialogError | null>(null)
   const ballsId = useId()
   const errorId = useId()
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!winnerId) return setError('Escolha o vencedor.')
+    if (!winnerId) return setError({ field: 'winner', text: 'Escolha o vencedor.' })
     const loserBallsRemaining = withdrawal ? ALL_BALLS : balls.trim() === '' ? NaN : Number(balls)
     if (!Number.isInteger(loserBallsRemaining) || loserBallsRemaining < 0 || loserBallsRemaining > ALL_BALLS) {
-      return setError(`As bolas deixadas têm de ser um número inteiro de 0 a ${ALL_BALLS}.`)
+      return setError({ field: 'balls', text: `As bolas deixadas têm de ser um número inteiro de 0 a ${ALL_BALLS}.` })
     }
     try {
       await onConfirm({ matchId, winnerId, loserBallsRemaining, kind: withdrawal ? 'withdrawal' : 'played' })
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Não foi possível guardar o resultado.')
+      setError({ field: null, text: failure instanceof Error ? failure.message : 'Não foi possível guardar o resultado.' })
     }
   }
 
   return (
-    <Modal title={mode === 'correct' ? 'Corrigir resultado' : 'Registar resultado'} onCancel={onCancel}>
+    <Modal title={mode === 'correct' ? 'Corrigir resultado' : 'Registar resultado'} onCancel={onCancel} returnFocus={returnFocus}>
       <p>{players[0].displayName} contra {players[1].displayName}</p>
-      <form onSubmit={submit} noValidate aria-describedby={error ? errorId : undefined}>
-        <fieldset>
+      <form onSubmit={submit} noValidate>
+        <fieldset aria-describedby={error?.field === 'winner' ? errorId : undefined}>
           <legend>Vencedor</legend>
           {players.map(player => (
             <label key={player.id} className="choice">
@@ -67,13 +70,15 @@ export default function ResultDialog({ matchId, players, mode = 'record', initia
           step={1}
           value={withdrawal ? String(ALL_BALLS) : balls}
           disabled={withdrawal}
+          aria-invalid={error?.field === 'balls'}
+          aria-describedby={error?.field === 'balls' ? errorId : undefined}
           onChange={event => setBalls(event.target.value)}
         />
         <label className="choice">
           <input type="checkbox" checked={withdrawal} onChange={event => setWithdrawal(event.target.checked)} />
           Desistência (o derrotado fica com as {ALL_BALLS} bolas)
         </label>
-        {error && <p id={errorId} role="alert" className="error">{error}</p>}
+        {error && <p id={errorId} role="alert" className="error">{error.text}</p>}
         <div className="actions">
           <button type="button" onClick={onCancel}>Cancelar</button>
           <button type="submit" className="primary">Confirmar resultado</button>

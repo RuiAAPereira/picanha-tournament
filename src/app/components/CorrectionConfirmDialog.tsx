@@ -6,10 +6,11 @@ type CorrectionConfirmDialogProps = {
   invalidated: string[]
   onConfirm(): void
   onCancel(): void
+  returnFocus?: () => HTMLElement | null
 }
 
 /** Destructive confirmation: focus starts on Cancelar so Enter never undoes matches by accident. */
-export default function CorrectionConfirmDialog({ invalidated, onConfirm, onCancel }: CorrectionConfirmDialogProps) {
+export default function CorrectionConfirmDialog({ invalidated, onConfirm, onCancel, returnFocus }: CorrectionConfirmDialogProps) {
   const [error, setError] = useState<string | null>(null)
 
   function confirm() {
@@ -21,7 +22,7 @@ export default function CorrectionConfirmDialog({ invalidated, onConfirm, onCanc
   }
 
   return (
-    <Modal title="Esta correção anula jogos já definidos" onCancel={onCancel}>
+    <Modal title="Esta correção anula jogos já definidos" onCancel={onCancel} returnFocus={returnFocus}>
       <p>Se confirmar, estes jogos perdem o resultado ou os jogadores e voltam a ficar por disputar:</p>
       <ul>
         {invalidated.map(label => <li key={label}>{label}</li>)}
