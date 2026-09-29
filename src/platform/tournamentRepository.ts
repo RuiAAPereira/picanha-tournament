@@ -20,34 +20,46 @@ export type TournamentSummary = {
   status: TournamentStatus
 }
 
-export type StorageErrorCode =
-  | 'unwritable'
-  | 'corrupt'
-  | 'not_found'
-  | 'schema_newer'
-  | 'history_conflict'
-  | 'invalid_snapshot'
-  | 'unexpected'
+/** Mirrors `StorageErrorCode` in src-tauri/src/storage/models.rs. */
+export const STORAGE_ERROR_CODES = [
+  'unwritable',
+  'busy',
+  'corrupt',
+  'not_found',
+  'schema_newer',
+  'history_conflict',
+  'invalid_snapshot',
+  'invalid_destination',
+  'unexpected',
+] as const
+
+export type StorageErrorCode = typeof STORAGE_ERROR_CODES[number]
 
 /** `message` is European Portuguese and safe to show; it never contains paths. */
 export type StorageError = { code: StorageErrorCode; message: string }
 
+/** Mirrors `SNAPSHOT_SCHEMA_VERSION` in src-tauri/src/storage/models.rs. */
 export const TOURNAMENT_SNAPSHOT_SCHEMA_VERSION = 1
 
+/** Mirrors the `Unexpected` message in src-tauri/src/storage/models.rs. */
 export const GENERIC_STORAGE_ERROR_MESSAGE = 'Ocorreu um erro inesperado ao aceder aos dados guardados.'
 
 export type TournamentRepository = {
   loadCurrent(): Promise<TournamentSnapshot | null>
   save(snapshot: TournamentSnapshot): Promise<void>
   list(): Promise<TournamentSummary[]>
+  /** `destination` resolves inside `<exe>/data/backups`; a bare file name is the normal case. */
   exportBackup(tournamentId: string, destination: string): Promise<void>
 }
 
 export type InvokeFn = (command: string, args?: Record<string, unknown>) => Promise<unknown>
 
+const isStorageErrorCode = (value: unknown): value is StorageErrorCode =>
+  (STORAGE_ERROR_CODES as readonly unknown[]).includes(value)
+
 const isStorageError = (value: unknown): value is StorageError =>
   typeof value === 'object' && value !== null
-  && typeof (value as { code?: unknown }).code === 'string'
+  && isStorageErrorCode((value as { code?: unknown }).code)
   && typeof (value as { message?: unknown }).message === 'string'
 
 const toStorageError = (error: unknown): StorageError => {

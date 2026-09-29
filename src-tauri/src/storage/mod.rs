@@ -9,10 +9,10 @@
 mod models;
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde_json::Value;
 
 pub use models::{
@@ -21,6 +21,8 @@ pub use models::{
 
 pub const DATA_DIR_NAME: &str = "data";
 pub const DB_FILE_NAME: &str = "picanha-tournament.sqlite";
+/// Backups live in `<exe_dir>/data/backups`; export destinations resolve inside it.
+pub const BACKUPS_DIR_NAME: &str = "backups";
 
 const CURRENT_TOURNAMENT_KEY: &str = "current_tournament_id";
 
@@ -37,15 +39,18 @@ const MIGRATIONS: &[(i64, &str)] = &[(
     );
     CREATE TABLE snapshots (
         tournament_id TEXT PRIMARY KEY NOT NULL REFERENCES tournaments(tournament_id),
-        schema_version INTEGER NOT NULL,
-        state_json TEXT NOT NULL
+        schema_version INTEGER NOT NULL CHECK (schema_version > 0),
+        state_json TEXT NOT NULL CHECK (json_valid(state_json))
     );
     CREATE TABLE audit_events (
         tournament_id TEXT NOT NULL REFERENCES tournaments(tournament_id),
-        seq INTEGER NOT NULL,
-        event_json TEXT NOT NULL,
+        seq INTEGER NOT NULL CHECK (seq >= 0),
+        event_json TEXT NOT NULL CHECK (json_valid(event_json)),
         PRIMARY KEY (tournament_id, seq)
     );
+    -- Append-only audit history. These triggers also block deleting a
+    -- tournament's events, so a future "apagar torneio" feature must decide
+    -- explicitly how (and whether) to remove them.
     CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events
     BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
     CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events
@@ -61,6 +66,7 @@ const MIGRATIONS: &[(i64, &str)] = &[(
 pub struct Storage {
     conn: Connection,
     db_path: PathBuf,
+    backups_dir: PathBuf,
 }
 
 impl Storage {
@@ -71,11 +77,12 @@ impl Storage {
         let data_dir = exe_dir.join(DATA_DIR_NAME);
         fs::create_dir_all(&data_dir)?;
         let db_path = data_dir.join(DB_FILE_NAME);
+        let backups_dir = data_dir.join(BACKUPS_DIR_NAME);
         let conn = Connection::open(&db_path)?;
         conn.busy_timeout(Duration::from_secs(2))?;
         conn.pragma_update(None, "foreign_keys", true)?;
         migrate(&conn)?;
-        Ok(Self { conn, db_path })
+        Ok(Self { conn, db_path, backups_dir })
     }
 
     pub fn db_path(&self) -> &Path {
@@ -178,11 +185,7 @@ impl Storage {
             params![snapshot.tournament_id, snapshot.schema_version, state_json],
         )?;
         append_audit_events(&tx, &snapshot.tournament_id, audit_log)?;
-        tx.execute(
-            "INSERT INTO settings (key, value) VALUES (?1, ?2)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![CURRENT_TOURNAMENT_KEY, snapshot.tournament_id],
-        )?;
+        set_current_tournament(&tx, &snapshot.tournament_id)?;
         tx.commit()?;
         Ok(())
     }
@@ -206,10 +209,16 @@ impl Storage {
         Ok(summaries)
     }
 
-    /// Writes a consistent copy of the database to `destination`. The copy is
-    /// built in a temporary file beside it (`VACUUM INTO`, read-only on the live
-    /// DB) and renamed into place, so a failure never leaves a partial backup.
+    /// Writes a consistent copy of the database to `destination`, resolved
+    /// inside `<exe_dir>/data/backups` (a bare file name is the normal case;
+    /// anything landing outside that folder is `InvalidDestination`). The copy
+    /// is built in a temporary file beside it (`VACUUM INTO`, read-only on the
+    /// live DB), its current pointer is set to `tournament_id` so restoring the
+    /// backup reopens that tournament, and it is then renamed into place, so a
+    /// failure never leaves a partial backup.
     pub fn export_backup(&self, tournament_id: &str, destination: &Path) -> Result<(), StorageError> {
+        let destination = self.resolve_backup_destination(destination)?;
+        let destination = destination.as_path();
         let exists = self
             .conn
             .query_row(
@@ -225,13 +234,10 @@ impl Storage {
                 format!("export of unknown tournament {tournament_id}"),
             ));
         }
-        let file_name = destination.file_name().ok_or_else(|| {
-            StorageError::with_detail(StorageErrorCode::Unwritable, "backup destination has no file name")
-        })?;
-        let parent = match destination.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => parent,
-            _ => Path::new("."),
-        };
+        // Guaranteed by `resolve_backup_destination`: the path is strictly
+        // below the backups folder, so it has a file name and a parent.
+        let file_name = destination.file_name().expect("resolved destination has a file name");
+        let parent = destination.parent().expect("resolved destination has a parent");
         fs::create_dir_all(parent)?;
 
         let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
@@ -241,20 +247,79 @@ impl Storage {
             std::process::id(),
             nanos
         ));
-        let result = write_backup(&self.conn, &temp_path, destination);
+        let result = write_backup(&self.conn, tournament_id, &temp_path, destination);
         if result.is_err() {
             let _ = fs::remove_file(&temp_path);
         }
         result
     }
+
+    fn resolve_backup_destination(&self, destination: &Path) -> Result<PathBuf, StorageError> {
+        let invalid = |why: &str| {
+            StorageError::with_detail(
+                StorageErrorCode::InvalidDestination,
+                format!("backup destination {destination:?} rejected: {why}"),
+            )
+        };
+        let joined = if destination.is_absolute() {
+            destination.to_path_buf()
+        } else if destination.has_root()
+            || matches!(destination.components().next(), Some(Component::Prefix(_)))
+        {
+            return Err(invalid("drive- or root-relative path"));
+        } else {
+            self.backups_dir.join(destination)
+        };
+        let resolved = normalize_lexically(&joined);
+        let base = normalize_lexically(&self.backups_dir);
+        if resolved == base || !resolved.starts_with(&base) {
+            return Err(invalid("outside the backups folder"));
+        }
+        if resolved == normalize_lexically(&self.db_path) {
+            return Err(invalid("is the live database"));
+        }
+        Ok(resolved)
+    }
 }
 
-fn write_backup(conn: &Connection, temp_path: &Path, destination: &Path) -> Result<(), StorageError> {
+/// Resolves `.` and `..` without touching the filesystem (the target may not exist yet).
+fn normalize_lexically(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other),
+        }
+    }
+    normalized
+}
+
+fn write_backup(
+    conn: &Connection,
+    tournament_id: &str,
+    temp_path: &Path,
+    destination: &Path,
+) -> Result<(), StorageError> {
     let temp_text = temp_path.to_str().ok_or_else(|| {
         StorageError::with_detail(StorageErrorCode::Unwritable, "backup path is not valid UTF-8")
     })?;
     conn.execute("VACUUM INTO ?1", [temp_text])?;
+    let copy = Connection::open(temp_path)?;
+    set_current_tournament(&copy, tournament_id)?;
+    copy.close().map_err(|(_, error)| error)?;
     fs::rename(temp_path, destination)?;
+    Ok(())
+}
+
+fn set_current_tournament(conn: &Connection, tournament_id: &str) -> Result<(), StorageError> {
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![CURRENT_TOURNAMENT_KEY, tournament_id],
+    )?;
     Ok(())
 }
 
@@ -300,35 +365,48 @@ fn append_audit_events(
     Ok(())
 }
 
-fn migrate(conn: &Connection) -> Result<(), StorageError> {
+fn applied_migration(conn: &Connection) -> Result<i64, StorageError> {
     let has_table: bool = conn.query_row(
         "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations')",
         [],
         |row| row.get(0),
     )?;
-    let applied: i64 = if has_table {
-        conn.query_row("SELECT COALESCE(MAX(version), 0) FROM schema_migrations", [], |row| row.get(0))?
-    } else {
-        0
-    };
-    let latest = MIGRATIONS.last().map_or(0, |(version, _)| *version);
+    if !has_table {
+        return Ok(0);
+    }
+    Ok(conn.query_row("SELECT COALESCE(MAX(version), 0) FROM schema_migrations", [], |row| row.get(0))?)
+}
+
+fn check_not_newer(applied: i64, latest: i64) -> Result<(), StorageError> {
     if applied > latest {
         return Err(StorageError::with_detail(
             StorageErrorCode::SchemaNewer,
             format!("database migration {applied} > supported {latest}"),
         ));
     }
+    Ok(())
+}
+
+fn migrate(conn: &Connection) -> Result<(), StorageError> {
+    let latest = MIGRATIONS.last().map_or(0, |(version, _)| *version);
+    // Read-only fast path: an up-to-date database opens without writing.
+    let applied = applied_migration(conn)?;
+    check_not_newer(applied, latest)?;
     if applied == latest {
         return Ok(());
     }
 
-    let tx = conn.unchecked_transaction()?;
+    // IMMEDIATE takes the write lock up front and the version is re-read under
+    // it, so two copies of the app opening a fresh database cannot both migrate.
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
             version INTEGER PRIMARY KEY NOT NULL,
             applied_at TEXT NOT NULL
         );",
     )?;
+    let applied = applied_migration(&tx)?;
+    check_not_newer(applied, latest)?;
     for (version, sql) in MIGRATIONS.iter().filter(|(version, _)| *version > applied) {
         tx.execute_batch(sql)?;
         tx.execute(

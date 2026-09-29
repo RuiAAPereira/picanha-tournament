@@ -3,6 +3,7 @@ import type { TournamentState } from '../domain/tournament'
 import {
   createTauriTournamentRepository,
   GENERIC_STORAGE_ERROR_MESSAGE,
+  STORAGE_ERROR_CODES,
   type TournamentSnapshot,
   type TournamentSummary,
 } from './tournamentRepository'
@@ -70,7 +71,22 @@ describe('createTauriTournamentRepository', () => {
     await expect(repository.save(snapshot)).rejects.toEqual(error)
   })
 
+  it.each(['busy', 'invalid_destination'])('passes the %s storage error code through', async (code) => {
+    const error = { code, message: 'Mensagem em português.' }
+    const repository = createTauriTournamentRepository(vi.fn().mockRejectedValue(error))
+
+    await expect(repository.exportBackup('t-1', 'copia.sqlite')).rejects.toEqual(error)
+  })
+
+  it('accepts every known storage error code', () => {
+    expect([...STORAGE_ERROR_CODES].sort()).toEqual([
+      'busy', 'corrupt', 'history_conflict', 'invalid_destination', 'invalid_snapshot',
+      'not_found', 'schema_newer', 'unexpected', 'unwritable',
+    ])
+  })
+
   it.each([
+    ['an unknown code', { code: 'disk_on_fire', message: 'Detalhe interno em C:\\dados' }],
     ['a string', 'IPC failure at C:\\secret\\path'],
     ['an Error', new Error('boom')],
     ['a malformed object', { code: 42, message: null }],

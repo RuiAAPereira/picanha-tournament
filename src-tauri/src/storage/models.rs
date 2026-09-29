@@ -36,6 +36,8 @@ pub enum StorageErrorCode {
     SchemaNewer,
     HistoryConflict,
     InvalidSnapshot,
+    InvalidDestination,
+    Busy,
     Unexpected,
 }
 
@@ -54,6 +56,12 @@ impl StorageErrorCode {
                 "O histórico do torneio não corresponde ao que está guardado. A alteração não foi guardada."
             }
             Self::InvalidSnapshot => "Os dados do torneio são inválidos e não foram guardados.",
+            Self::InvalidDestination => {
+                "A cópia de segurança tem de ser guardada na pasta de cópias do programa. Escolha outro nome de ficheiro."
+            }
+            Self::Busy => {
+                "Os dados estão a ser usados por outro programa. Feche-o e tente novamente."
+            }
             Self::Unexpected => "Ocorreu um erro inesperado ao aceder aos dados guardados.",
         }
     }
@@ -88,20 +96,26 @@ impl std::error::Error for StorageError {}
 
 impl From<rusqlite::Error> for StorageError {
     fn from(error: rusqlite::Error) -> Self {
-        use rusqlite::ErrorCode as Sql;
-        let code = match error.sqlite_error_code() {
-            Some(
-                Sql::ReadOnly
-                | Sql::CannotOpen
-                | Sql::PermissionDenied
-                | Sql::DiskFull
-                | Sql::SystemIoFailure
-                | Sql::DatabaseBusy
-                | Sql::DatabaseLocked
-                | Sql::FileLockingProtocolFailed,
-            ) => StorageErrorCode::Unwritable,
-            Some(Sql::NotADatabase | Sql::DatabaseCorrupt) => StorageErrorCode::Corrupt,
-            _ => StorageErrorCode::Unexpected,
+        use rusqlite::{Error as E, ErrorCode as Sql};
+        let code = match &error {
+            // Stored values of the wrong type or range: the file was altered.
+            E::FromSqlConversionFailure(..)
+            | E::InvalidColumnType(..)
+            | E::IntegralValueOutOfRange(..)
+            | E::Utf8Error(_) => StorageErrorCode::Corrupt,
+            _ => match error.sqlite_error_code() {
+                Some(
+                    Sql::ReadOnly
+                    | Sql::CannotOpen
+                    | Sql::PermissionDenied
+                    | Sql::DiskFull
+                    | Sql::SystemIoFailure
+                    | Sql::FileLockingProtocolFailed,
+                ) => StorageErrorCode::Unwritable,
+                Some(Sql::DatabaseBusy | Sql::DatabaseLocked) => StorageErrorCode::Busy,
+                Some(Sql::NotADatabase | Sql::DatabaseCorrupt) => StorageErrorCode::Corrupt,
+                _ => StorageErrorCode::Unexpected,
+            },
         };
         Self::with_detail(code, error)
     }

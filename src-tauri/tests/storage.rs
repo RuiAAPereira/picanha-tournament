@@ -1,8 +1,8 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use picanha_tournament_lib::storage::{
-    Storage, StorageErrorCode, TournamentSnapshot, DATA_DIR_NAME, DB_FILE_NAME,
+    Storage, StorageErrorCode, TournamentSnapshot, BACKUPS_DIR_NAME, DATA_DIR_NAME, DB_FILE_NAME,
     SNAPSHOT_SCHEMA_VERSION,
 };
 use serde_json::{json, Value};
@@ -32,7 +32,7 @@ fn state(id: &str, name: &str, audit_log: Value) -> Value {
                 { "id": "A-2", "player1Id": "p2", "player2Id": "p3", "groupId": "A" }
             ]
         }],
-        "bracket": { "rounds": [], "championId": null, "ratio": 0.5, "negative": -1 },
+        "bracket": { "rounds": [], "championId": null, "ratio": 0.1, "third": 0.30000000000000004, "negative": -1 },
         "tieDraws": [],
         "auditLog": audit_log
     })
@@ -62,6 +62,17 @@ fn open(dir: &Path) -> Storage {
     Storage::open(dir).expect("storage opens")
 }
 
+fn backups_dir(exe_dir: &Path) -> PathBuf {
+    exe_dir.join(DATA_DIR_NAME).join(BACKUPS_DIR_NAME)
+}
+
+fn dir_entries(dir: &Path) -> Vec<String> {
+    match fs::read_dir(dir) {
+        Ok(entries) => entries.map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
 fn assert_no_path_in_message(message: &str, dir: &Path) {
     let dir_text = dir.to_string_lossy();
     assert!(!message.contains(dir_text.as_ref()), "message leaks path: {message}");
@@ -77,6 +88,7 @@ fn storage_creates_database_under_data_beside_executable() {
     let expected = exe_dir.path().join(DATA_DIR_NAME).join(DB_FILE_NAME);
     assert_eq!(DATA_DIR_NAME, "data");
     assert_eq!(DB_FILE_NAME, "picanha-tournament.sqlite");
+    assert_eq!(BACKUPS_DIR_NAME, "backups");
     assert_eq!(storage.db_path(), expected.as_path());
     assert!(expected.is_file());
 }
@@ -108,6 +120,7 @@ fn storage_reloads_saved_snapshot_identically_after_restart() {
         serde_json::to_string(&loaded.state).unwrap(),
         serde_json::to_string(&saved.state).unwrap()
     );
+    assert_eq!(loaded.state["bracket"]["third"].as_f64(), Some(0.30000000000000004));
     let wire = serde_json::to_value(&loaded).unwrap();
     assert_eq!(wire["schemaVersion"], json!(1));
     assert_eq!(wire["tournamentId"], json!("t-1"));
@@ -168,9 +181,11 @@ fn storage_appends_audit_events_without_rewriting_history() {
     assert_eq!(rows, vec![(0, first), (1, second)]);
 
     let tampered = conn.execute("UPDATE audit_events SET event_json = '{}' WHERE seq = 0", []);
-    assert!(tampered.is_err(), "audit events must be immutable");
+    let tampered = tampered.expect_err("audit events must be immutable").to_string();
+    assert!(tampered.contains("audit_events is append-only"), "unexpected error: {tampered}");
     let deleted = conn.execute("DELETE FROM audit_events", []);
-    assert!(deleted.is_err(), "audit events must be append-only");
+    let deleted = deleted.expect_err("audit events must be append-only").to_string();
+    assert!(deleted.contains("audit_events is append-only"), "unexpected error: {deleted}");
 }
 
 #[test]
@@ -214,6 +229,19 @@ fn storage_rejects_history_conflict_and_keeps_previous_snapshot() {
         result_event("A-1", "2026-09-28T19:30:00.000Z")
     ]))).unwrap();
     assert_eq!(reopened.load_current().unwrap().unwrap().state, original.state);
+}
+
+#[test]
+fn storage_rejects_snapshot_without_audit_log() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let storage = open(exe_dir.path());
+    let mut missing = snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]));
+    missing.state.as_object_mut().unwrap().remove("auditLog");
+
+    let err = storage.save(&missing).unwrap_err();
+
+    assert_eq!(err.code, StorageErrorCode::InvalidSnapshot);
+    assert_eq!(storage.load_current().unwrap(), None);
 }
 
 #[test]
@@ -262,6 +290,23 @@ fn storage_failed_save_on_read_only_database_keeps_previous_snapshot() {
 }
 
 #[test]
+fn storage_reports_busy_when_another_program_holds_a_write_lock() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let saved = snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]));
+    let storage = open(exe_dir.path());
+    storage.save(&saved).unwrap();
+    let other = rusqlite::Connection::open(storage.db_path()).unwrap();
+    other.execute_batch("BEGIN EXCLUSIVE").unwrap();
+
+    let err = storage.save(&snapshot("t-1", "Alterado", "2026-09-28T20:05:00.000Z", json!([]))).unwrap_err();
+
+    assert_eq!(err.code, StorageErrorCode::Busy);
+    assert!(err.message.contains("outro programa"), "unexpected message: {}", err.message);
+    other.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(storage.load_current().unwrap(), Some(saved));
+}
+
+#[test]
 fn storage_reports_corrupt_database_file() {
     let exe_dir = tempfile::tempdir().unwrap();
     let data_dir = exe_dir.path().join(DATA_DIR_NAME);
@@ -272,6 +317,45 @@ fn storage_reports_corrupt_database_file() {
 
     assert_eq!(err.code, StorageErrorCode::Corrupt);
     assert_no_path_in_message(&err.message, exe_dir.path());
+}
+
+#[test]
+fn storage_reports_current_pointer_without_snapshot_as_corrupt() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let storage = open(exe_dir.path());
+    rusqlite::Connection::open(storage.db_path())
+        .unwrap()
+        .execute("INSERT INTO settings (key, value) VALUES ('current_tournament_id', 'fantasma')", [])
+        .unwrap();
+
+    assert_eq!(storage.load_current().unwrap_err().code, StorageErrorCode::Corrupt);
+}
+
+#[test]
+fn storage_reports_unparseable_snapshot_json_as_corrupt() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let storage = open(exe_dir.path());
+    storage.save(&snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]))).unwrap();
+    let conn = rusqlite::Connection::open(storage.db_path()).unwrap();
+    let rejected = conn.execute("UPDATE snapshots SET state_json = '{not json'", []);
+    assert!(rejected.is_err(), "schema must reject invalid state_json");
+    conn.execute_batch("PRAGMA ignore_check_constraints = ON").unwrap();
+    conn.execute("UPDATE snapshots SET state_json = '{not json'", []).unwrap();
+
+    assert_eq!(storage.load_current().unwrap_err().code, StorageErrorCode::Corrupt);
+}
+
+#[test]
+fn storage_reports_wrongly_typed_columns_as_corrupt() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let storage = open(exe_dir.path());
+    storage.save(&snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]))).unwrap();
+    rusqlite::Connection::open(storage.db_path())
+        .unwrap()
+        .execute("UPDATE tournaments SET name = x'00ff'", [])
+        .unwrap();
+
+    assert_eq!(storage.load_current().unwrap_err().code, StorageErrorCode::Corrupt);
 }
 
 #[test]
@@ -311,6 +395,20 @@ fn storage_records_applied_migrations_once() {
 }
 
 #[test]
+fn storage_refuses_database_migrated_by_newer_version() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let db_path = open(exe_dir.path()).db_path().to_path_buf();
+    rusqlite::Connection::open(db_path)
+        .unwrap()
+        .execute("INSERT INTO schema_migrations (version, applied_at) VALUES (99, 'futuro')", [])
+        .unwrap();
+
+    let err = Storage::open(exe_dir.path()).unwrap_err();
+
+    assert_eq!(err.code, StorageErrorCode::SchemaNewer);
+}
+
+#[test]
 fn storage_exports_consistent_backup_atomically() {
     let exe_dir = tempfile::tempdir().unwrap();
     let storage = open(exe_dir.path());
@@ -318,46 +416,94 @@ fn storage_exports_consistent_backup_atomically() {
         result_event("A-1", "2026-09-28T19:30:00.000Z")
     ]));
     storage.save(&saved).unwrap();
-    let backups = exe_dir.path().join(DATA_DIR_NAME).join("backups");
-    let destination = backups.join("torneio.sqlite");
+    let backups = backups_dir(exe_dir.path());
     fs::create_dir_all(&backups).unwrap();
-    fs::write(&destination, b"old backup").unwrap();
+    fs::write(backups.join("torneio.sqlite"), b"old backup").unwrap();
 
-    storage.export_backup("t-1", &destination).unwrap();
+    storage.export_backup("t-1", Path::new("torneio.sqlite")).unwrap();
 
     let restored_dir = tempfile::tempdir().unwrap();
     let restored_data = restored_dir.path().join(DATA_DIR_NAME);
     fs::create_dir_all(&restored_data).unwrap();
-    fs::copy(&destination, restored_data.join(DB_FILE_NAME)).unwrap();
+    fs::copy(backups.join("torneio.sqlite"), restored_data.join(DB_FILE_NAME)).unwrap();
     assert_eq!(open(restored_dir.path()).load_current().unwrap(), Some(saved.clone()));
-    let leftovers: Vec<_> = fs::read_dir(&backups).unwrap().map(|e| e.unwrap().file_name()).collect();
-    assert_eq!(leftovers, vec![std::ffi::OsString::from("torneio.sqlite")]);
+    assert_eq!(dir_entries(&backups), vec!["torneio.sqlite".to_string()]);
     assert_eq!(storage.load_current().unwrap(), Some(saved));
 }
 
 #[test]
-fn storage_export_creates_missing_backup_folder() {
+fn storage_backup_restores_exported_tournament_as_current() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let storage = open(exe_dir.path());
+    let first = snapshot("t-1", "Primeiro", "2026-09-28T20:00:00.000Z", json!([]));
+    storage.save(&first).unwrap();
+    storage.save(&snapshot("t-2", "Segundo", "2026-09-28T21:00:00.000Z", json!([]))).unwrap();
+
+    storage.export_backup("t-1", Path::new("primeiro.sqlite")).unwrap();
+
+    let restored_dir = tempfile::tempdir().unwrap();
+    let restored_data = restored_dir.path().join(DATA_DIR_NAME);
+    fs::create_dir_all(&restored_data).unwrap();
+    fs::copy(backups_dir(exe_dir.path()).join("primeiro.sqlite"), restored_data.join(DB_FILE_NAME)).unwrap();
+    assert_eq!(open(restored_dir.path()).load_current().unwrap(), Some(first));
+    assert_eq!(storage.load_current().unwrap().unwrap().tournament_id, "t-2");
+}
+
+#[test]
+fn storage_export_creates_missing_backup_folder_and_accepts_paths_inside_it() {
     let exe_dir = tempfile::tempdir().unwrap();
     let storage = open(exe_dir.path());
     storage.save(&snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]))).unwrap();
-    let destination = exe_dir.path().join(DATA_DIR_NAME).join("backups").join("copia.sqlite");
+    let backups = backups_dir(exe_dir.path());
 
-    storage.export_backup("t-1", &destination).unwrap();
+    storage.export_backup("t-1", Path::new("copia.sqlite")).unwrap();
+    storage.export_backup("t-1", Path::new("setembro/./copia.sqlite")).unwrap();
+    storage.export_backup("t-1", &backups.join("absoluta.sqlite")).unwrap();
 
-    assert!(destination.is_file());
+    assert!(backups.join("copia.sqlite").is_file());
+    assert!(backups.join("setembro").join("copia.sqlite").is_file());
+    assert!(backups.join("absoluta.sqlite").is_file());
+}
+
+#[test]
+fn storage_export_rejects_destinations_outside_backup_folder() {
+    let exe_dir = tempfile::tempdir().unwrap();
+    let storage = open(exe_dir.path());
+    let saved = snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]));
+    storage.save(&saved).unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let live_db = storage.db_path().to_path_buf();
+    let candidates: Vec<PathBuf> = vec![
+        outside.path().join("fora.sqlite"),
+        PathBuf::from("../fuga.sqlite"),
+        PathBuf::from("sub/../../fuga.sqlite"),
+        PathBuf::from(format!("../{DB_FILE_NAME}")),
+        live_db,
+        backups_dir(exe_dir.path()),
+        PathBuf::from(""),
+        PathBuf::from("."),
+    ];
+
+    for destination in candidates {
+        let err = storage.export_backup("t-1", &destination).unwrap_err();
+        assert_eq!(err.code, StorageErrorCode::InvalidDestination, "destination {destination:?}");
+        assert_no_path_in_message(&err.message, exe_dir.path());
+    }
+
+    assert!(dir_entries(outside.path()).is_empty());
+    assert_eq!(dir_entries(&exe_dir.path().join(DATA_DIR_NAME)), vec![DB_FILE_NAME.to_string()]);
+    assert_eq!(open(exe_dir.path()).load_current().unwrap(), Some(saved));
 }
 
 #[test]
 fn storage_export_rejects_unknown_tournament_without_writing() {
     let exe_dir = tempfile::tempdir().unwrap();
     let storage = open(exe_dir.path());
-    let out_dir = tempfile::tempdir().unwrap();
-    let destination = out_dir.path().join("copia.sqlite");
 
-    let err = storage.export_backup("inexistente", &destination).unwrap_err();
+    let err = storage.export_backup("inexistente", Path::new("copia.sqlite")).unwrap_err();
 
     assert_eq!(err.code, StorageErrorCode::NotFound);
-    assert_eq!(fs::read_dir(out_dir.path()).unwrap().count(), 0);
+    assert!(dir_entries(&backups_dir(exe_dir.path())).is_empty());
 }
 
 #[test]
@@ -366,14 +512,78 @@ fn storage_export_to_unwritable_destination_fails_cleanly() {
     let storage = open(exe_dir.path());
     let saved = snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]));
     storage.save(&saved).unwrap();
-    let out_dir = tempfile::tempdir().unwrap();
-    fs::write(out_dir.path().join("blocked"), b"file, not folder").unwrap();
-    let destination = out_dir.path().join("blocked").join("copia.sqlite");
+    let backups = backups_dir(exe_dir.path());
+    fs::create_dir_all(&backups).unwrap();
+    fs::write(backups.join("bloqueado"), b"file, not folder").unwrap();
 
-    let err = storage.export_backup("t-1", &destination).unwrap_err();
+    let err = storage.export_backup("t-1", Path::new("bloqueado/copia.sqlite")).unwrap_err();
 
     assert_eq!(err.code, StorageErrorCode::Unwritable);
-    assert_no_path_in_message(&err.message, out_dir.path());
-    assert_eq!(fs::read_dir(out_dir.path()).unwrap().count(), 1);
+    assert_no_path_in_message(&err.message, exe_dir.path());
+    assert_eq!(dir_entries(&backups), vec!["bloqueado".to_string()]);
     assert_eq!(storage.load_current().unwrap(), Some(saved));
+}
+
+#[cfg(windows)]
+mod acl {
+    use super::*;
+    use std::process::Command;
+
+    const EVERYONE_SID: &str = "*S-1-1-0";
+
+    /// Removes the deny entries even if the test panics.
+    struct DenyWriteGuard(Vec<PathBuf>);
+
+    impl DenyWriteGuard {
+        fn deny(dirs: &[PathBuf]) -> Self {
+            let guard = Self(dirs.to_vec());
+            for dir in dirs {
+                let output = Command::new("icacls")
+                    .arg(dir)
+                    .args(["/deny", &format!("{EVERYONE_SID}:(AD,WD)")])
+                    .output()
+                    .expect("icacls available");
+                assert!(output.status.success(), "icacls deny failed: {output:?}");
+            }
+            guard
+        }
+    }
+
+    impl Drop for DenyWriteGuard {
+        fn drop(&mut self) {
+            for dir in &self.0 {
+                let _ = Command::new("icacls").arg(dir).args(["/remove:d", EVERYONE_SID]).output();
+            }
+        }
+    }
+
+    #[test]
+    fn storage_denied_data_folder_fails_save_and_export_then_recovers() {
+        let exe_dir = tempfile::tempdir().unwrap();
+        let saved = snapshot("t-1", "Torneio", "2026-09-28T20:00:00.000Z", json!([]));
+        let storage = open(exe_dir.path());
+        storage.save(&saved).unwrap();
+        let data_dir = exe_dir.path().join(DATA_DIR_NAME);
+        let backups = backups_dir(exe_dir.path());
+        fs::create_dir_all(&backups).unwrap();
+
+        {
+            let _guard = DenyWriteGuard::deny(&[data_dir.clone(), backups.clone()]);
+
+            let save_err = storage
+                .save(&snapshot("t-1", "Alterado", "2026-09-28T20:05:00.000Z", json!([])))
+                .unwrap_err();
+            assert_eq!(save_err.code, StorageErrorCode::Unwritable);
+            assert_no_path_in_message(&save_err.message, exe_dir.path());
+            let export_err = storage.export_backup("t-1", Path::new("copia.sqlite")).unwrap_err();
+            assert_eq!(export_err.code, StorageErrorCode::Unwritable);
+            assert_no_path_in_message(&export_err.message, exe_dir.path());
+        }
+
+        drop(storage);
+        assert!(dir_entries(&backups).is_empty());
+        let reopened = open(exe_dir.path());
+        assert_eq!(reopened.load_current().unwrap(), Some(saved));
+        reopened.save(&snapshot("t-1", "Depois", "2026-09-28T20:10:00.000Z", json!([]))).unwrap();
+    }
 }
