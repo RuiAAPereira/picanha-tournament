@@ -58,75 +58,81 @@ export default function NewTournamentPage() {
   }
 
   return (
-    <section aria-labelledby="new-title">
+    <section aria-labelledby="new-title" className="tournament-setup">
       <h2 id="new-title" tabIndex={-1}>Novo torneio</h2>
-      <form onSubmit={create} noValidate>
-        <label htmlFor={ids.name}>Nome do torneio</label>
-        <input
-          id={ids.name}
-          value={name}
-          required
-          aria-invalid={!!formError}
-          aria-describedby={formError ? ids.formError : undefined}
-          onChange={event => {
-            setName(event.target.value)
-            setFormError(null)
-          }}
-        />
-
-        <h3>Inscrições</h3>
-        <div className="inline">
-          <label htmlFor={ids.player}>Jogador</label>
+      <form onSubmit={create} noValidate className="setup-form">
+        <div className="panel setup-identity">
+          <label htmlFor={ids.name}>Nome do torneio</label>
           <input
-            id={ids.player}
-            value={entry}
-            aria-invalid={!!playerError}
-            aria-describedby={playerError ? ids.playerError : undefined}
-            onChange={event => setEntry(event.target.value)}
-            onKeyDown={onEntryKeyDown}
+            id={ids.name}
+            value={name}
+            required
+            aria-invalid={!!formError}
+            aria-describedby={formError ? ids.formError : undefined}
+            onChange={event => {
+              setName(event.target.value)
+              setFormError(null)
+            }}
           />
-          <button type="button" onClick={addPlayer}>Adicionar</button>
         </div>
-        {playerError && <p id={ids.playerError} role="alert" className="error">{playerError}</p>}
-        <p>{countText(players.length)}</p>
-        <ol aria-label="Inscritos" className="players">
-          {players.map(player => (
-            <li key={player.id}>
-              {player.displayName}{' '}
-              <button
-                type="button"
-                aria-label={`Remover ${player.displayName}`}
-                onClick={() => setPlayers(players.filter(candidate => candidate.id !== player.id))}
-              >
-                Remover
-              </button>
-            </li>
-          ))}
-        </ol>
-
-        <fieldset>
-          <legend>Formato</legend>
-          <section aria-labelledby="recommended-title">
-            <h3 id="recommended-title">Formato recomendado</h3>
-            {ready.length > 1 ? (
-              <FormatChoice proposal={ready[0]} index={0} label="Recomendado" chosen={chosenIndex} reasonId={ids.reason}
-                onChoose={index => setChoice({ count: players.length, index })} />
-            ) : <p>{top.reason}</p>}
-          </section>
-          {ready.length > 1 && (
-            <section aria-labelledby="alternatives-title">
-              <h3 id="alternatives-title">Alternativas</h3>
-              {ready.slice(1).map((proposal, offset) => (
-                <FormatChoice key={offset} proposal={proposal} index={offset + 1} label={`Alternativa ${offset + 1}`}
-                  chosen={chosenIndex} reasonId={ids.reason} onChoose={index => setChoice({ count: players.length, index })} />
+        <div className="setup-grid">
+          <section aria-labelledby="enrolment-title" className="panel enrolment-panel">
+            <h3 id="enrolment-title">Inscrições</h3>
+            <div className="inline player-entry">
+              <label htmlFor={ids.player}>Jogador</label>
+              <input
+                id={ids.player}
+                value={entry}
+                aria-invalid={!!playerError}
+                aria-describedby={playerError ? ids.playerError : undefined}
+                onChange={event => setEntry(event.target.value)}
+                onKeyDown={onEntryKeyDown}
+              />
+              <button type="button" onClick={addPlayer}>Adicionar</button>
+            </div>
+            {playerError && <p id={ids.playerError} role="alert" className="error">{playerError}</p>}
+            <p className="roster-count">{countText(players.length)}</p>
+            <ol aria-label="Inscritos" className="players">
+              {players.map(player => (
+                <li key={player.id}>
+                  <span>{player.displayName}</span>{' '}
+                  <button
+                    type="button"
+                    aria-label={`Remover ${player.displayName}`}
+                    onClick={() => setPlayers(players.filter(candidate => candidate.id !== player.id))}
+                  >
+                    Remover
+                  </button>
+                </li>
               ))}
-            </section>
-          )}
-        </fieldset>
+            </ol>
+          </section>
+          <section aria-labelledby="format-title" className="panel format-panel">
+            <fieldset>
+              <legend id="format-title">Formato</legend>
+              <section aria-labelledby="recommended-title">
+                <h3 id="recommended-title">Formato recomendado</h3>
+                {ready.length > 1 ? (
+                  <FormatChoice proposal={ready[0]} index={0} label="Recomendado" chosen={chosenIndex} reasonId={ids.reason}
+                    onChoose={index => setChoice({ count: players.length, index })} />
+                ) : <p>{top.reason}</p>}
+              </section>
+              {ready.length > 1 && (
+                <section aria-labelledby="alternatives-title">
+                  <h3 id="alternatives-title">Alternativas</h3>
+                  {ready.slice(1).map((proposal, offset) => (
+                    <FormatChoice key={offset} proposal={proposal} index={offset + 1} label={`Alternativa ${offset + 1}`}
+                      chosen={chosenIndex} reasonId={ids.reason} onChoose={index => setChoice({ count: players.length, index })} />
+                  ))}
+                </section>
+              )}
+            </fieldset>
+          </section>
+        </div>
 
         {formError && <p id={ids.formError} role="alert" className="error">{formError}</p>}
-        <div className="actions">
-          <a href={ROUTES.home}>Voltar</a>
+        <div className="actions workflow-actions">
+          <a href={ROUTES.home} className="button quiet">Voltar</a>
           <button type="submit" className="primary" disabled={top.creationBlocked}>Criar e sortear</button>
         </div>
       </form>
@@ -146,7 +152,7 @@ type FormatChoiceProps = {
 function FormatChoice({ proposal, index, label, chosen, reasonId, onChoose }: FormatChoiceProps) {
   const descriptionId = `${reasonId}-${index}`
   return (
-    <div className="format-choice">
+    <div className={`format-choice${chosen === index ? ' is-selected' : ''}`}>
       <label className="choice">
         <input
           type="radio"

@@ -17,6 +17,9 @@ async function openHome(state = fourPlayerState()) {
 describe('HomePage', () => {
   it('asks before a new tournament replaces an unfinished one', async () => {
     const { user } = await openHome()
+    const current = screen.getByRole('region', { name: 'Torneio atual' })
+    expect(within(current).getByRole('button', { name: 'Continuar torneio' })).toBeEnabled()
+    expect(current).toHaveTextContent('Torneio em curso: Torneio')
     expect(screen.getByText(/Torneio em curso:/)).toHaveTextContent('Torneio em curso: Torneio')
     await user.click(screen.getByRole('button', { name: 'Novo torneio' }))
     const dialog = screen.getByRole('dialog', { name: 'Substituir o torneio em curso?' })

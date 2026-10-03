@@ -166,7 +166,56 @@
 .operator .modal-backdrop { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.72); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
 .operator .modal { box-sizing: border-box; width: min(100%, 640px); max-height: calc(100dvh - 32px); overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 24px; box-shadow: 0 24px 80px rgb(0 0 0 / 0.4); }
 
+/* Event lobby, enrolment and draw panels. */
+.operator .lobby-panel { max-width: 960px; padding: clamp(20px, 3vw, 36px); }
+.operator .lobby-panel h3, .operator .enrolment-panel h3, .operator .draw-briefing h3 { margin-top: 0; }
+.operator .lobby-panel > p { font-size: 1.1rem; overflow-wrap: anywhere; }
+.operator .panel-note { color: var(--muted); }
+.operator .lobby-actions { margin-bottom: 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.operator .lobby-actions .quiet { margin-left: auto; }
+.operator .setup-form { max-width: 1320px; }
+.operator .setup-identity { margin-bottom: 20px; }
+.operator .setup-identity label { margin-top: 0; }
+.operator .setup-identity input { width: min(100%, 640px); }
+.operator .setup-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.operator .player-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.operator .player-entry label { grid-column: 1 / -1; }
+.operator .player-entry input { width: 100%; min-width: 0; }
+.operator .roster-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.operator .players { padding-left: 28px; margin-bottom: 0; }
+.operator .players li { padding: 10px 0 10px 4px; border-top: 1px solid var(--line); }
+.operator .players li::marker { color: var(--muted); font-variant-numeric: tabular-nums; }
+.operator .players li > span { display: inline-block; width: calc(100% - 112px); vertical-align: middle; overflow-wrap: anywhere; }
+.operator .players button { min-height: 36px; padding: 6px 10px; background: transparent; color: var(--muted); font-size: 0.85rem; }
+.operator .format-panel fieldset { margin: 0; padding: 0; border: 0; }
+.operator .format-panel legend { padding: 0; color: var(--text); font-size: 1.1rem; font-weight: 700; }
+.operator .format-panel h3 { color: var(--muted); font-size: 0.9rem; }
+.operator .format-choice { margin: 10px 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: 7px; background: var(--page); }
+.operator .format-choice.is-selected { border-color: var(--interaction); background: #182e28; }
+.operator .format-choice label { font-weight: 700; cursor: pointer; }
+.operator .format-choice p { margin: 8px 0 0; color: var(--muted); }
+.operator .format-choice.is-selected label { color: var(--interaction); }
+.operator .workflow-actions { justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.operator .workflow-actions > .quiet { margin-right: auto; }
+.operator .draw-briefing { max-width: 840px; padding: clamp(20px, 3vw, 32px); }
+.operator .draw-briefing > p, .operator .draw-summary { overflow-wrap: anywhere; }
+.operator .draw-briefing .workflow-actions { border-top: 1px solid var(--line); padding-top: 20px; margin-bottom: 0; }
+.operator .preliminary-roster { margin: 20px 0; }
+.operator .preliminary-roster h3 { margin-top: 0; }
+.operator .preliminary-roster li { padding: 6px 0; overflow-wrap: anywhere; }
+.operator .roster-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.operator .roster-panel { min-width: 0; padding: 0; overflow: hidden; }
+.operator .roster-panel h3 { margin: 0; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--surface-raised); }
+.operator .draw-player-list { list-style: none; margin: 0; padding: 6px 20px; }
+.operator .draw-player-list li { padding: 12px 0; overflow-wrap: anywhere; }
+.operator .draw-player-list li + li { border-top: 1px solid var(--line); }
+
 @media (max-width: 760px) {
+  .operator .setup-grid { grid-template-columns: minmax(0, 1fr); }
+  .operator .lobby-actions .quiet { margin-left: 0; }
+  .operator .lobby-actions { align-items: stretch; }
+  .operator .lobby-actions > button { flex: 1 1 220px; }
+  .operator .workflow-actions > .primary { flex: 1 1 auto; text-align: center; }
   .operator .operator-header { gap: 16px; }
   .operator .tournament-context { max-width: 100%; }
   .operator .primary-navigation { flex-basis: 100%; margin-left: 0; }
@@ -174,6 +223,7 @@
   .operator .operator-utilities .inline { flex-basis: 100%; margin-right: 0; }
   .operator .operator-utilities select { flex: 1; min-width: 0; }
   .operator .card, .operator .panel { padding: 12px; }
+  .operator .roster-panel { padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
