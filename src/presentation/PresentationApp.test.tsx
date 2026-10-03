@@ -44,7 +44,7 @@ const drawState: PresentationState = {
       id: 'A',
       entrants: [{ name: 'Rui' }, { name: 'Ana' }, { name: 'Vencedor PE 1', description: 'Vencedor da Pré-eliminatória 1' }],
     }],
-    preliminaryMatches: [{ label: 'Pré-eliminatória 1', sides: ['Eva', 'Gil'] }],
+    preliminaryMatches: [{ label: 'Pré-eliminatória 1', shortLabel: 'PE 1', sides: ['Eva', 'Gil'] }],
   },
 }
 
@@ -88,6 +88,7 @@ describe('PresentationApp', () => {
     expect(within(group).getByRole('listitem', { name: 'Vencedor da Pré-eliminatória 1' })).toBeVisible()
     expect(within(group).getByText('Rui')).toBeVisible()
     const preliminary = screen.getByRole('region', { name: 'Pré-eliminatória 1' })
+    expect(within(preliminary).getByRole('heading', { name: 'Pré-eliminatória 1' })).toHaveTextContent(/^PE 1$/)
     expect(within(preliminary).getByText('Eva')).toBeVisible()
   })
 
@@ -103,16 +104,21 @@ describe('PresentationApp', () => {
   }
 
   it.each([
-    { players: 29, groups: 5, preliminaries: 4, cols: '5', rows: '2' },
-    { players: 11, groups: 2, preliminaries: 1, cols: '2', rows: '2' },
-  ])('sizes five-player groups by their lines: $players players, $groups×5 + $preliminaries', expected => {
-    const { state, projected } = drawFor(expected.players, 5, p => p.groupCount === expected.groups && p.groupSize === 5)
+    { players: 29, groups: 5, size: 5, preliminaries: 4, cols: '5', rows: '2', lines: '5' },
+    { players: 11, groups: 2, size: 5, preliminaries: 1, cols: '2', rows: '2', lines: '5' },
+    { players: 32, groups: 8, size: 3, preliminaries: 8, cols: '5', rows: '4', lines: '3' },
+  ])('sizes the cards by their lines: $players players, $groups×$size + $preliminaries', expected => {
+    const { state, projected } = drawFor(
+      expected.players, expected.size, p => p.groupCount === expected.groups && p.groupSize === expected.size)
     expect(state.preliminaryMatches).toHaveLength(expected.preliminaries)
     render(<PresentationApp initialState={projected} />)
     const draw = screen.getByTestId('draw')
-    expect(draw.style.getPropertyValue('--lines')).toBe('5')
+    expect(draw.style.getPropertyValue('--lines')).toBe(expected.lines)
     expect(draw.style.getPropertyValue('--cols')).toBe(expected.cols)
     expect(draw.style.getPropertyValue('--rows')).toBe(expected.rows)
+    // Short preliminary titles stay on one line; the full wording names the card.
+    const last = `Pré-eliminatória ${expected.preliminaries}`
+    expect(screen.getByRole('heading', { name: last })).toHaveTextContent(new RegExp(`^PE ${expected.preliminaries}$`))
   })
 
   it('fits the largest draw on one screen: ten groups in five columns, preliminaries in the same grid', () => {

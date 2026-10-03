@@ -32,6 +32,7 @@ describe('projectPresentation', () => {
     expect(entrants.every(entrant => !/^[a-z]+$/.test(entrant.name))).toBe(true)
     expect(projected.payload.preliminaryMatches).toHaveLength(1)
     expect(projected.payload.preliminaryMatches[0].label).toBe('Pré-eliminatória 1')
+    expect(projected.payload.preliminaryMatches[0].shortLabel).toBe('PE 1')
     expect(projected.payload.preliminaryMatches[0].sides.every(name => /^[A-Z]/.test(name))).toBe(true)
   })
 

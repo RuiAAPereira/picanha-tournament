@@ -28,8 +28,9 @@ function projectDraw(state: TournamentState): PresentationState {
     tournamentName: state.name,
     payload: {
       groups: state.draw.groups.map(group => ({ id: group.id, entrants: drawEntrants(state, group.id) })),
-      preliminaryMatches: state.preliminaryMatches.map(match => ({
+      preliminaryMatches: state.preliminaryMatches.map((match, index) => ({
         label: preliminaryName(state, match.id),
+        shortLabel: `PE ${index + 1}`,
         sides: matchSides(state, match),
       })),
     },

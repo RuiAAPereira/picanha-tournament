@@ -29,7 +29,7 @@ function PreliminaryCard({ match }: { match: PreliminaryView }) {
   const titleId = useId()
   return (
     <motion.section className="card preliminary" aria-labelledby={titleId} variants={revealItem}>
-      <h2 id={titleId}>{match.label}</h2>
+      <h2 id={titleId} aria-label={match.label}>{match.shortLabel}</h2>
       <ul>
         <li>{match.sides[0]}</li>
         <li className="versus">contra</li>

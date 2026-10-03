@@ -108,8 +108,8 @@
 
 .presentation .draw {
   /* --cols, --rows and --lines (entrants in the tallest card) come from DrawPresentation. A card is about
-     2.9em of title and padding plus 1.4em per line, so its text shrinks until every row fits one screen. */
-  --card-font: min(calc(78vh / (var(--rows) * (2.9 + 1.4 * var(--lines)))), calc(88vw / (var(--cols) * 11)), 52px);
+     3.1em of title and padding plus 1.4em per line, so its text shrinks until every row fits one screen. */
+  --card-font: min(calc(78vh / (var(--rows) * (3.1 + 1.4 * var(--lines)))), calc(88vw / (var(--cols) * 11)), 52px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: clamp(8px, 2vh, 40px);
@@ -138,6 +138,9 @@
 }
 
 .presentation .card h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   margin-bottom: 0.3em;
   color: var(--accent);
   font-size: 1.15em;

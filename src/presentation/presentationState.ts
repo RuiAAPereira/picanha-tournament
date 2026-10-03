@@ -7,7 +7,8 @@ export type DrawEntrant = { name: string; description?: string }
 
 export type DrawGroupView = { id: string; entrants: DrawEntrant[] }
 
-export type PreliminaryView = { label: string; sides: [string, string] }
+/** `shortLabel` (e.g. `PE 1`) is the card title on the TV; `label` is the full wording. */
+export type PreliminaryView = { label: string; shortLabel: string; sides: [string, string] }
 
 export type DrawPayload = { groups: DrawGroupView[]; preliminaryMatches: PreliminaryView[] }
 
