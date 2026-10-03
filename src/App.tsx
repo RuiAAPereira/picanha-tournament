@@ -1,6 +1,7 @@
 import { ROUTES, useHashRoute } from './app/hashRoute'
 import OperatorApp from './app/OperatorApp'
 import { TournamentProvider } from './app/TournamentProvider'
+import { createDemoTournament } from './demo/seedTournament'
 import PresentationApp from './presentation/PresentationApp'
 
 export default function App() {
@@ -10,7 +11,7 @@ export default function App() {
   if (route === ROUTES.presentation) return <PresentationApp />
 
   return (
-    <TournamentProvider>
+    <TournamentProvider demo={createDemoTournament}>
       <OperatorApp />
     </TournamentProvider>
   )

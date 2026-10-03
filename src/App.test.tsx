@@ -13,6 +13,7 @@ it('renders the operator shell', async () => {
   render(<App />)
   expect(screen.getByRole('main', { name: /torneio/i })).toBeVisible()
   expect(await screen.findByRole('button', { name: 'Novo torneio' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Carregar demonstração' })).toBeEnabled()
 })
 
 it('renders the read-only presentation, with only a mute button', async () => {
