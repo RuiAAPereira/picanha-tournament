@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { championId } from '../app/labels'
+import { championId, matchLabel, resultText } from '../app/labels'
 import { applyMatchResult, isGroupFinished, pendingTieScopes, type TournamentState } from '../domain/tournament'
 import { createDemoTournament, demoPresentationStates } from './seedTournament'
 
@@ -45,6 +45,17 @@ describe('createDemoTournament', () => {
     expect(rounds[1].matches[1].homePlayerId && rounds[1].matches[1].awayPlayerId).toBeTruthy()
     expect(rounds[2].matches[0].result).toBeUndefined()
     expect(championId(state)).toBeNull()
+  })
+
+  // Keep docs/manual-test-demo.md in sync with these names.
+  it('has the knockout matches the manual script names', () => {
+    const state = createDemoTournament()
+    const [quarters, semis] = state.bracket.rounds.map(round => round.matches)
+    const summary = (match: (typeof quarters)[number]) =>
+      [matchLabel(state, match.id), match.result ? resultText(state, match, match.result) : 'por disputar']
+    expect(summary(quarters[2])).toEqual(['Quartos-de-final, jogo 3: Carla contra Tiago', 'Carla venceu; Tiago deixou 4 bolas'])
+    expect(summary(semis[0])).toEqual(['Meias-finais, jogo 1: Beatriz contra Nuno', 'Beatriz venceu; Nuno deixou 3 bolas'])
+    expect(summary(semis[1])).toEqual(['Meias-finais, jogo 2: Carla contra Marta', 'por disputar'])
   })
 
   it('survives a JSON round-trip and reaches a champion within two results', () => {

@@ -13,14 +13,14 @@ Guião de aceitação para o operador. Cada passo indica o que fazer e o que dev
 
 1. Crie uma pasta onde o utilizador possa escrever, por exemplo `C:\Torneio` ou uma pen USB. **Não** use `C:\Program Files`.
 2. Copie `picanha-tournament.exe` para essa pasta e abra-o com duplo clique.
-3. Esperado: abre a janela do operador em "Início". Ao guardar pela primeira vez, aparece a pasta `data\` ao lado do executável, com `picanha-tournament.sqlite`. Não é preciso internet, conta nem instalação.
+3. Esperado: abre a janela do operador em "Início". A pasta `data\`, com `picanha-tournament.sqlite`, é criada ao lado do executável ao abrir a aplicação (ou, o mais tardar, ao guardar). Não é preciso internet, conta nem instalação.
 
 ## Lista de verificação
 
 | N.º | Ação | Resultado esperado |
 | --- | --- | --- |
 | 1 | Em "Início", clique em **Novo torneio**, dê um nome e inscreva 16 jogadores fictícios (botão **Adicionar**). | O formato recomendado é "4 grupos de 4, com fase final de 8 (apuram-se os 2 primeiros de cada grupo)". |
-| 2 | Clique em **Criar e sortear**. Na página "Sorteio", **antes** de sortear, clique em **Apresentar**. | Abre a janela da apresentação. Arraste-a para a TV, se ainda lá não estiver. A TV mostra o nome do torneio, sem botões do operador (apenas **Silenciar**). |
+| 2 | Clique em **Criar e sortear**. Na página "Sorteio", **antes** de sortear, clique em **Apresentar**. | Com o ecrã alargado, a apresentação abre logo em ecrã inteiro na TV, sem ser preciso arrastá-la. Se abrir no portátil e tiver de a arrastar, registe-o como desvio. (Só com um ecrã, abre numa janela de 1280×720.) A TV mostra o nome do torneio, sem botões do operador (apenas **Silenciar**). |
 | 3 | Sem tocar na TV, clique em **Sortear**. | Aparecem os quatro grupos no portátil e o estado de gravação mostra "Guardado". A TV mostra o sorteio com animação. Anote se o som tocou. |
 | 4 | Clique em **Continuar para os grupos** e registe um resultado de grupo (vencedor e bolas deixadas pelo derrotado), ainda sem tocar na TV. | A TV mostra o resultado com animação de cerca de 3 s. Anote se o som tocou sem clicar na TV. Se a TV mostrar "Clique no ecrã para ativar o som" (aceitável), clique uma vez na TV; a partir daí o som toca sem mais cliques. A classificação do grupo é atualizada no portátil. |
 | 5 | Registe outro resultado de grupo. | A TV mostra o resultado com animação e som, sem pedir outro clique. |
@@ -32,13 +32,14 @@ Guião de aceitação para o operador. Cada passo indica o que fazer e o que dev
 | 11 | Corrija um resultado de quarto-de-final, mudando o vencedor (**Corrigir**). | Aparece "Esta correção anula jogos já definidos" com a lista dos jogos afetados. **Cancelar** deixa tudo como estava. **Confirmar correção** limpa esses jogos e a TV mostra "Resultado corrigido". |
 | 12 | Registe a outra meia-final e a final. | O portátil mostra "Campeão: …". A TV mostra o campeão e o finalista vencido. |
 | 13 | Feche a aplicação (a janela do operador). | A janela da TV também fecha. |
-| 14 | Abra de novo o executável e clique em **Continuar torneio**. | O torneio volta exatamente como estava, com o campeão. Ao abrir **Apresentar**, a TV mostra o campeão sem animação. |
+| 14 | Abra de novo o executável e clique em **Continuar torneio**. A aplicação abre em "Grupos"; abra **Ver fase final**. | O torneio volta exatamente como estava, com o campeão. Ao abrir **Apresentar**, a TV mostra o campeão sem animação. |
 | 15 | Clique em **Exportar cópia de segurança**. | Aparece "Cópia de segurança exportada: …". O ficheiro está em `data\backups\` ao lado do executável. |
 | 16 | (Opcional) Copie o executável para uma pen USB protegida contra escrita, ou para uma pasta onde a escrita esteja negada em Propriedades → Segurança, e abra-o. (O atributo "Só de leitura" de uma pasta não chega no Windows.) | A aplicação abre e avisa que a pasta de dados não permite escrita. É possível usá-la, mas o torneio não fica guardado. |
-| 17 | Em "Início", clique em **Carregar demonstração**. Se houver um torneio por terminar, confirme a substituição. | Abre o "Torneio de demonstração", com 16 jogadores. Os grupos e os quartos-de-final estão jogados, tal como a 1.ª meia-final (Beatriz venceu Nuno). Faltam a 2.ª meia-final (Carla contra Marta) e a final. O torneio anterior continua guardado. |
-| 18 | Na demonstração, registe a 2.ª meia-final e a final. | A TV mostra o resultado e depois o campeão. Corrigir o quarto-de-final "Carla contra Tiago" pede confirmação e lista a 2.ª meia-final e a final. |
-| 19 | Crie um torneio com **13 jogadores**. | O formato recomendado é "3 grupos de 4, após 1 pré-eliminatória com 2 jogadores sorteados; 1 vencedor avança para os grupos, com fase final de 4 (apuram-se os vencedores dos grupos e o melhor segundo classificado)". No sorteio, a TV mostra o lugar do vencedor como "Vencedor PE 1". Depois da pré-eliminatória, o grupo passa a mostrar o vencedor. |
-| 20 | Com a TV a 1920×1080, veja o sorteio, um resultado e o campeão a cerca de 3 m. | Os nomes leem-se sem cortes nem sobreposições. Os grupos cabem no ecrã. |
+| 17 | Em "Início", clique em **Carregar demonstração**. Se houver um torneio por terminar, confirme a substituição. A aplicação abre em "Grupos"; abra **Ver fase final**. | Abre o "Torneio de demonstração", com 16 jogadores. Os grupos e os quartos-de-final estão jogados, tal como a 1.ª meia-final (Beatriz venceu Nuno). Faltam a 2.ª meia-final (Carla contra Marta) e a final. A demonstração passa a ser o torneio em curso; o torneio anterior fica registado na base de dados, mas nesta versão não pode voltar a ser aberto na aplicação. |
+| 18 | Em **Ver fase final** da demonstração, registe a 2.ª meia-final e a final. | A TV mostra o resultado e depois o campeão. Corrigir o quarto-de-final "Carla contra Tiago" pede confirmação e lista a 2.ª meia-final e a final. |
+| 19 | Crie um torneio com **13 jogadores**. | O formato recomendado é "3 grupos de 4, após 1 pré-eliminatória com 2 jogadores sorteados; 1 vencedor avança para os grupos, com fase final de 4 (apuram-se os vencedores dos grupos e o melhor segundo classificado)". No sorteio, a TV mostra o lugar do vencedor como "Vencedor PE 1". Depois da pré-eliminatória, o grupo passa a mostrar o vencedor. Todas as alternativas propostas têm grupos iguais: um número de jogadores que não dá grupos iguais passa sempre por uma pré-eliminatória. |
+| 20 | Em **Novo torneio**, inscreva só 3 jogadores. | **Criar e sortear** fica desativado e aparece a explicação "O torneio requer 4 a 32 jogadores." A criação só é bloqueada fora de 4 a 32 jogadores. |
+| 21 | Com a TV a 1920×1080, veja o sorteio, um resultado e o campeão a cerca de 3 m. | Os nomes leem-se sem cortes nem sobreposições. Os grupos cabem no ecrã. |
 
 ## Verificações da apresentação (pendentes da tarefa 7)
 
@@ -58,7 +59,7 @@ Faça estas verificações em `npm run tauri dev` ou com o executável:
 - Vários resultados rápidos: a TV termina no último.
 - Com "movimento reduzido" ativo no Windows, as atualizações aparecem sem animação.
 - Fechar a janela do operador fecha a TV.
-- Nas ferramentas de programador da TV, `invoke('load_current_tournament')` é recusado.
+- Só em `npm run tauri dev` (o executável final não tem ferramentas de programador): nas ferramentas de programador da TV, `invoke('load_current_tournament')` é recusado.
 
 ## Se algo falhar
 

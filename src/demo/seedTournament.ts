@@ -53,11 +53,15 @@ function seededRandom(seed: number): () => number {
   }
 }
 
-/** `at` for the n-th recorded result: five minutes apart from 20:30 on the demo day. */
+/**
+ * `at` for the n-th recorded result: five minutes apart from 20:30 on the demo day. Built as a string
+ * (no `Date`); the demo records 31 results at most, ending at 23:00, so the day never rolls over.
+ */
 function resultAt(index: number): string {
-  const minutes = 30 + index * 5
+  const minutes = 20 * 60 + 30 + index * 5
+  if (minutes >= 24 * 60) throw new Error(`Demonstração: o resultado ${index + 1} passaria para o dia seguinte.`)
   const pad = (value: number) => String(value).padStart(2, '0')
-  return `2026-09-26T${pad(20 + Math.floor(minutes / 60))}:${pad(minutes % 60)}:00.000Z`
+  return `2026-09-26T${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}:00.000Z`
 }
 
 function playKnockout(
@@ -66,10 +70,19 @@ function playKnockout(
   firstIndex: number,
 ): TournamentState {
   return results.reduce((current, [matchId, side, loserBallsRemaining], offset) => {
-    const match = current.bracket.rounds.flatMap(round => round.matches).find(candidate => candidate.id === matchId)!
-    const winnerId = (side === 'home' ? match.homePlayerId : match.awayPlayerId) as PlayerId
+    const match = current.bracket.rounds.flatMap(round => round.matches).find(candidate => candidate.id === matchId)
+    if (!match) throw new Error(`Demonstração: o jogo ${matchId} não existe.`)
+    const winnerId: PlayerId | null = side === 'home' ? match.homePlayerId : match.awayPlayerId
+    if (!winnerId) throw new Error(`Demonstração: o lugar ${side} do jogo ${matchId} ainda não tem jogador.`)
     return applyMatchResult(current, { matchId, winnerId, loserBallsRemaining, at: resultAt(firstIndex + offset) })
   }, state)
+}
+
+function fourGroupsOfFour(): ReadyProposal {
+  const proposal = proposeFormats(PLAYERS.length).find((candidate): candidate is ReadyProposal =>
+    !candidate.creationBlocked && candidate.groupSize === 4 && candidate.groupCount === 4)
+  if (!proposal) throw new Error('Demonstração: não há proposta de 4 grupos de 4.')
+  return proposal
 }
 
 /**
@@ -78,7 +91,7 @@ function playKnockout(
  * the operator can record a result, try a correction that undoes later matches and reach the champion.
  */
 export function createDemoTournament(): TournamentState {
-  const proposal = proposeFormats(PLAYERS.length)[0] as ReadyProposal
+  const proposal = fourGroupsOfFour()
   const drawn = createTournamentState({
     id: 'torneio-de-demonstracao',
     name: NAME,

@@ -51,7 +51,7 @@ export default function HomePage() {
       {replacing && state && (
         <Modal title="Substituir o torneio em curso?" onCancel={() => setReplacing(null)}>
           <p>
-            O torneio <strong>{state.name}</strong> ainda não terminou. Continua guardado, mas deixa de ser o torneio em curso.
+            O torneio <strong>{state.name}</strong> ainda não terminou. Deixa de ser o torneio em curso e, nesta versão, não pode voltar a ser aberto na aplicação (fica apenas registado na base de dados).
           </p>
           <div className="actions">
             <button type="button" onClick={() => setReplacing(null)}>Cancelar</button>

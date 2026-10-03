@@ -1,7 +1,7 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { navigate, ROUTES } from '../app/hashRoute'
+import { ROUTES } from '../app/hashRoute'
 import OperatorApp from '../app/OperatorApp'
 import { NOW, fakeRepository } from '../app/testSupport'
 import { TournamentProvider } from '../app/TournamentProvider'
@@ -71,7 +71,8 @@ describe('demo tournament, end to end', () => {
     await vi.waitFor(() => expect(repository.save).toHaveBeenCalledTimes(1))
     expect(repository.save.mock.calls[0][0].state.name).toBe('Torneio de demonstração')
 
-    act(() => navigate(ROUTES.bracket))
+    await screen.findByRole('heading', { name: 'Grupos' })
+    await user.click(screen.getByRole('link', { name: 'Ver fase final' }))
     await screen.findByRole('heading', { name: 'Fase final' })
 
     // The pending semi-final: a result for the TV.
@@ -102,7 +103,7 @@ describe('demo tournament, end to end', () => {
 
     // The final: the champion, on the operator screen and for the TV.
     await recordResult(user, 'Beatriz contra Marta', 'Beatriz', '1')
-    expect(screen.getByText('Campeão: Beatriz')).toBeVisible()
+    expect(await screen.findByText('Campeão: Beatriz')).toBeVisible()
     await vi.waitFor(() => expect(repository.save).toHaveBeenCalledTimes(3))
     expect(repository.save.mock.calls[2][0]).toMatchObject({ status: 'finished' })
     const [finished, finalEvent] = presentation.publish.mock.calls.at(-1)!

@@ -20,6 +20,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: 'Novo torneio' }))
     const dialog = screen.getByRole('dialog', { name: 'Substituir o torneio em curso?' })
     expect(dialog).toHaveTextContent('Torneio')
+    expect(dialog).toHaveTextContent('não pode voltar a ser aberto na aplicação')
     await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(window.location.hash).toBe('#/operator')
