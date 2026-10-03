@@ -6,16 +6,19 @@
   --surface: #19252e;
   --surface-raised: #22323d;
   --page: #101a22;
-  --accent: #eab15b;
-  --accent-hover: #f5c478;
-  --accent-ink: #20170b;
+  --interaction: #63c498;
+  --interaction-hover: #85dab3;
+  --interaction-ink: #092a1b;
+  --progression: #eab15b;
+  --progression-highlight: #f5c478;
+  --accent: var(--interaction);
   --danger: #ff9393;
   --danger-solid: #a62e38;
   --success: #91dab1;
   --warning-bg: #362c1d;
   --error-bg: #3b2029;
   --info-bg: #20333f;
-  --focus: #f5c478;
+  --focus: var(--interaction-hover);
   --radius: 10px;
   color-scheme: dark;
   font-family: 'Segoe UI', system-ui, sans-serif;
@@ -45,9 +48,9 @@
   place-items: center;
   width: 40px;
   height: 40px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--interaction);
   border-radius: 50%;
-  color: var(--accent);
+  color: var(--interaction);
   font-size: 1.25rem;
   font-weight: 800;
 }
@@ -65,7 +68,7 @@
   text-decoration: none;
 }
 .operator .primary-navigation a:hover { background: var(--surface); color: var(--text); }
-.operator .primary-navigation .is-active { background: var(--surface-raised); color: var(--accent); }
+.operator .primary-navigation .is-active { background: var(--surface-raised); color: var(--interaction); }
 .operator .operator-utilities { flex-basis: 100%; margin: 0; padding-top: 4px; }
 .operator .operator-utilities .inline { flex-wrap: wrap; margin-right: auto; }
 .operator .operator-utilities label { color: var(--muted); font-size: 0.85rem; }
@@ -85,13 +88,13 @@
 }
 .operator .save-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .operator .save-status--saved { color: var(--success); }
-.operator .save-status--saving { color: var(--accent); }
+.operator .save-status--saving { color: var(--interaction); }
 .operator .save-status--error { color: var(--danger); }
 
 .operator .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0; }
 .operator .actions.operator-utilities { margin: 0; }
 .operator .inline { display: flex; align-items: center; gap: 8px; }
-.operator a { color: var(--accent); text-underline-offset: 3px; }
+.operator a { color: var(--interaction); text-underline-offset: 3px; }
 .operator button, .operator .button {
   display: inline-block;
   box-sizing: border-box;
@@ -110,8 +113,8 @@
 }
 .operator button:hover:not(:disabled), .operator .button:hover { background: #2c404e; border-color: #607481; }
 .operator button:disabled { opacity: 0.5; cursor: not-allowed; }
-.operator .primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.operator .primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.operator .primary { background: var(--interaction); border-color: var(--interaction); color: var(--interaction-ink); }
+.operator .primary:hover:not(:disabled) { background: var(--interaction-hover); border-color: var(--interaction-hover); }
 .operator .quiet { background: transparent; color: var(--muted); }
 .operator .danger { background: var(--danger-solid); border-color: var(--danger-solid); color: #fff; }
 .operator .danger:hover:not(:disabled) { background: #be3944; border-color: #be3944; }
@@ -127,7 +130,7 @@
   color: var(--text);
   font: inherit;
 }
-.operator input[type='radio'], .operator input[type='checkbox'] { min-height: auto; accent-color: var(--accent); }
+.operator input[type='radio'], .operator input[type='checkbox'] { min-height: auto; accent-color: var(--interaction); }
 .operator input[aria-invalid='true'] { border-color: var(--danger); }
 .operator input::placeholder, .operator textarea::placeholder { color: var(--muted); }
 .operator label { display: block; margin: 12px 0 4px; }
@@ -153,12 +156,13 @@
 .operator caption { text-align: left; color: var(--muted); padding: 8px 0; }
 .operator th, .operator td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
 .operator tbody th { font-weight: 500; }
-.operator .tag { font-size: 0.8rem; background: var(--warning-bg); color: var(--accent-hover); padding: 2px 8px; border-radius: 999px; }
+.operator .tag { font-size: 0.8rem; background: var(--warning-bg); color: var(--text); padding: 2px 8px; border-radius: 999px; }
 .operator .matches { list-style: none; padding: 0; margin: 0; }
 .operator .match { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .operator .match .caption, .operator .match .result { color: var(--muted); }
 .operator .match button { margin-left: auto; }
-.operator .champion { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
+.operator .progression { color: var(--progression); }
+.operator .champion { font-size: 1.4rem; font-weight: 700; color: var(--progression-highlight); }
 .operator .modal-backdrop { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.72); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
 .operator .modal { box-sizing: border-box; width: min(100%, 640px); max-height: calc(100dvh - 32px); overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 24px; box-shadow: 0 24px 80px rgb(0 0 0 / 0.4); }
 
