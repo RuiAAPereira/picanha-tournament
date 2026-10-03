@@ -20,10 +20,10 @@ Guião de aceitação para o operador. Cada passo indica o que fazer e o que dev
 | N.º | Ação | Resultado esperado |
 | --- | --- | --- |
 | 1 | Em "Início", clique em **Novo torneio**, dê um nome e inscreva 16 jogadores fictícios (botão **Adicionar**). | O formato recomendado é "4 grupos de 4, com fase final de 8 (apuram-se os 2 primeiros de cada grupo)". |
-| 2 | Clique em **Criar e sortear** e depois em **Sortear**. | Aparecem os quatro grupos sorteados. O estado de gravação mostra "Guardado". |
-| 3 | Clique em **Apresentar**. | Abre a janela da apresentação. Arraste-a para a TV, se ainda lá não estiver. A TV mostra o nome do torneio ou o sorteio, sem botões do operador (apenas **Silenciar**). |
-| 4 | Se a TV mostrar "Clique no ecrã para ativar o som", clique uma vez na TV. | A mensagem desaparece. Depois disso, o som toca sem voltar a clicar na TV. |
-| 5 | Clique em **Continuar para os grupos** e registe um resultado de grupo (vencedor e bolas deixadas pelo derrotado). | A TV mostra o resultado com animação de cerca de 3 s e som. A classificação do grupo é atualizada no portátil. |
+| 2 | Clique em **Criar e sortear**. Na página "Sorteio", **antes** de sortear, clique em **Apresentar**. | Abre a janela da apresentação. Arraste-a para a TV, se ainda lá não estiver. A TV mostra o nome do torneio, sem botões do operador (apenas **Silenciar**). |
+| 3 | Sem tocar na TV, clique em **Sortear**. | Aparecem os quatro grupos no portátil e o estado de gravação mostra "Guardado". A TV mostra o sorteio com animação. Anote se o som tocou. |
+| 4 | Clique em **Continuar para os grupos** e registe um resultado de grupo (vencedor e bolas deixadas pelo derrotado), ainda sem tocar na TV. | A TV mostra o resultado com animação de cerca de 3 s. Anote se o som tocou sem clicar na TV. Se a TV mostrar "Clique no ecrã para ativar o som" (aceitável), clique uma vez na TV; a partir daí o som toca sem mais cliques. A classificação do grupo é atualizada no portátil. |
+| 5 | Registe outro resultado de grupo. | A TV mostra o resultado com animação e som, sem pedir outro clique. |
 | 6 | Registe outro resultado e clique em **Saltar** durante a animação. | A TV mostra logo o estado final da animação. |
 | 7 | Clique em **Silenciar** no portátil; registe um resultado. Depois clique em **Ativar som** na TV. | Com som desligado não se ouve nada. O botão na TV e no portátil mostram sempre o mesmo estado. |
 | 8 | Registe dois ou três resultados seguidos, rapidamente. | A TV termina no último resultado, sem mostrar um resultado antigo por cima de um novo. |
@@ -34,7 +34,7 @@ Guião de aceitação para o operador. Cada passo indica o que fazer e o que dev
 | 13 | Feche a aplicação (a janela do operador). | A janela da TV também fecha. |
 | 14 | Abra de novo o executável e clique em **Continuar torneio**. | O torneio volta exatamente como estava, com o campeão. Ao abrir **Apresentar**, a TV mostra o campeão sem animação. |
 | 15 | Clique em **Exportar cópia de segurança**. | Aparece "Cópia de segurança exportada: …". O ficheiro está em `data\backups\` ao lado do executável. |
-| 16 | (Opcional) Copie o executável para uma pasta só de leitura e abra-o. | A aplicação abre e avisa que a pasta de dados não permite escrita. É possível usá-la, mas o torneio não fica guardado. |
+| 16 | (Opcional) Copie o executável para uma pen USB protegida contra escrita, ou para uma pasta onde a escrita esteja negada em Propriedades → Segurança, e abra-o. (O atributo "Só de leitura" de uma pasta não chega no Windows.) | A aplicação abre e avisa que a pasta de dados não permite escrita. É possível usá-la, mas o torneio não fica guardado. |
 | 17 | Em "Início", clique em **Carregar demonstração**. Se houver um torneio por terminar, confirme a substituição. | Abre o "Torneio de demonstração", com 16 jogadores. Os grupos e os quartos-de-final estão jogados, tal como a 1.ª meia-final (Beatriz venceu Nuno). Faltam a 2.ª meia-final (Carla contra Marta) e a final. O torneio anterior continua guardado. |
 | 18 | Na demonstração, registe a 2.ª meia-final e a final. | A TV mostra o resultado e depois o campeão. Corrigir o quarto-de-final "Carla contra Tiago" pede confirmação e lista a 2.ª meia-final e a final. |
 | 19 | Crie um torneio com **13 jogadores**. | O formato recomendado é "3 grupos de 4, após 1 pré-eliminatória com 2 jogadores sorteados; 1 vencedor avança para os grupos, com fase final de 4 (apuram-se os vencedores dos grupos e o melhor segundo classificado)". No sorteio, a TV mostra o lugar do vencedor como "Vencedor PE 1". Depois da pré-eliminatória, o grupo passa a mostrar o vencedor. |
