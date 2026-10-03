@@ -60,38 +60,53 @@ export function calculateStandings(
       end++
     }
 
-    const cohort = standings.slice(start, end)
-    if (cohort.length > 1) {
-      const pairsComplete = cohort.every((standing, index) =>
-        cohort.slice(index + 1).every(opponent =>
-          completed.some(match =>
-            (match.player1Id === standing.playerId && match.player2Id === opponent.playerId)
-            || (match.player2Id === standing.playerId && match.player1Id === opponent.playerId),
-          ),
-        ),
-      )
-      if (pairsComplete) {
-        const cohortIds = new Set(cohort.map(standing => standing.playerId))
-        for (const standing of cohort) {
-          standing.headToHeadResult = completed.reduce((points, match) =>
-            points + (cohortIds.has(match.player1Id) && cohortIds.has(match.player2Id)
-              && match.result?.winnerId === standing.playerId ? 3 : 0), 0)
-        }
-        cohort.sort((a, b) => (b.headToHeadResult ?? 0) - (a.headToHeadResult ?? 0))
-        standings.splice(start, cohort.length, ...cohort)
-      }
-    }
-
-    for (let index = start; index < end; index++) {
-      const previous = index > start ? standings[index - 1] : null
-      const tiedWithPrevious = previous?.headToHeadResult === standings[index].headToHeadResult
-      const next = index + 1 < end ? standings[index + 1] : null
-      const tiedWithNext = next?.headToHeadResult === standings[index].headToHeadResult
-      standings[index].rank = tiedWithPrevious ? previous.rank : index + 1
-      standings[index].requiresDraw = tiedWithPrevious || tiedWithNext
-    }
+    standings.splice(start, end - start, ...breakTie(standings.slice(start, end), completed, start + 1, true))
     start = end
   }
 
   return standings
+}
+
+/**
+ * Orders players level on points and balls by their mini-table, then re-applies it to each part that
+ * is still level (only their mutual matches). What no mini-table can split goes to a draw.
+ * `headToHeadResult` keeps the mini-table of the outermost tie.
+ */
+function breakTie(cohort: GroupStanding[], completed: TournamentMatch[], rank: number, outermost: boolean): GroupStanding[] {
+  const settle = (requiresDraw: boolean) => {
+    for (const standing of cohort) {
+      standing.rank = rank
+      standing.requiresDraw = requiresDraw
+    }
+    return cohort
+  }
+  if (cohort.length === 1) return settle(false)
+
+  const ids = new Set(cohort.map(standing => standing.playerId))
+  const mutual = completed.filter(match => ids.has(match.player1Id) && ids.has(match.player2Id))
+  const pairsComplete = cohort.every((standing, index) =>
+    cohort.slice(index + 1).every(opponent =>
+      mutual.some(match =>
+        (match.player1Id === standing.playerId && match.player2Id === opponent.playerId)
+        || (match.player2Id === standing.playerId && match.player1Id === opponent.playerId),
+      ),
+    ),
+  )
+  if (!pairsComplete) return settle(true)
+
+  const score = new Map(cohort.map(standing => [standing.playerId,
+    mutual.reduce((points, match) => points + (match.result?.winnerId === standing.playerId ? 3 : 0), 0)]))
+  if (outermost) for (const standing of cohort) standing.headToHeadResult = score.get(standing.playerId)!
+
+  const parts: GroupStanding[][] = []
+  for (const standing of [...cohort].sort((a, b) => score.get(b.playerId)! - score.get(a.playerId)!)) {
+    const last = parts.at(-1)
+    if (last && score.get(last[0].playerId) === score.get(standing.playerId)) last.push(standing)
+    else parts.push([standing])
+  }
+  if (parts.length === 1) return settle(true)
+
+  const ordered: GroupStanding[] = []
+  for (const part of parts) ordered.push(...breakTie(part, completed, rank + ordered.length, false))
+  return ordered
 }

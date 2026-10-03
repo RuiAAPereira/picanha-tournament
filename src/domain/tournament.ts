@@ -97,6 +97,16 @@ export function createTournamentState(input: {
   })
 }
 
+/** A minimal shape check for stored data, enough for the screens to open it without crashing. */
+export function isTournamentState(value: unknown): value is TournamentState {
+  if (typeof value !== 'object' || value === null) return false
+  const state = value as Record<string, unknown>
+  const bracket = state.bracket as Record<string, unknown> | null | undefined
+  return typeof state.id === 'string' && typeof state.name === 'string'
+    && ['players', 'groups', 'preliminaryMatches', 'tieDraws', 'auditLog'].every(key => Array.isArray(state[key]))
+    && typeof bracket === 'object' && bracket !== null && Array.isArray(bracket.rounds)
+}
+
 /** Group standings with stored tie draws applied. */
 export function groupStandings(state: TournamentState, groupId: string): GroupStanding[] {
   const group = state.groups.find(candidate => candidate.id === groupId)

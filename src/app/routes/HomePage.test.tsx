@@ -17,6 +17,7 @@ async function openHome(state = fourPlayerState()) {
 describe('HomePage', () => {
   it('asks before a new tournament replaces an unfinished one', async () => {
     const { user } = await openHome()
+    expect(screen.getByText(/Torneio em curso:/)).toHaveTextContent('Torneio em curso: Torneio')
     await user.click(screen.getByRole('button', { name: 'Novo torneio' }))
     const dialog = screen.getByRole('dialog', { name: 'Substituir o torneio em curso?' })
     expect(dialog).toHaveTextContent('Torneio')
@@ -45,6 +46,8 @@ describe('HomePage', () => {
     const played = playGroups(fourPlayerState(), ['ana', 'bruno', 'carla', 'duarte'])
     const finished = applyMatchResult(played, { matchId: 'knockout-1-1', winnerId: 'ana', loserBallsRemaining: 0, at: NOW })
     const { user } = await openHome(finished)
+    expect(screen.getByText(/Último torneio:/)).toHaveTextContent('Último torneio: Torneio (terminado)')
+    expect(screen.queryByText(/Torneio em curso/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Novo torneio' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Novo torneio' })).toBeVisible()

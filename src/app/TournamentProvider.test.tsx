@@ -63,6 +63,17 @@ describe('startup', () => {
     expect(screen.getByRole('button', { name: 'Novo torneio' })).toBeEnabled()
   })
 
+  it('reports a saved tournament with an invalid state as damaged and still allows a new one', async () => {
+    const repository = fakeRepository()
+    const snapshot = snapshotOf(fourPlayerState())
+    repository.loadCurrent.mockResolvedValue({ ...snapshot, state: { id: 't', name: 'T' } as never })
+    renderOperator('#/operator', { repository })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/danificado/)
+    expect(screen.getByRole('button', { name: 'Novo torneio' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Continuar torneio' })).toBeDisabled()
+    expect(repository.save).not.toHaveBeenCalled()
+  })
+
   it('loads the demonstration only when one is provided, as a new tournament each time', async () => {
     const repository = fakeRepository()
     const { user } = renderOperator('#/operator', { repository, demo: fourPlayerState })

@@ -1,4 +1,4 @@
-import { groupStandings, type TournamentGroup, type TournamentState } from '../../domain/tournament'
+import { groupStandings, isGroupFinished, type TournamentGroup, type TournamentState } from '../../domain/tournament'
 import { groupEntrants, playerName } from '../labels'
 import MatchItem from './MatchItem'
 import type { ResultFlow } from './useResultFlow'
@@ -10,6 +10,8 @@ export default function GroupCard({ state, group, flow }: GroupCardProps) {
   const standings = groupStandings(state, group.id)
   const pending = group.matches.filter(match => !match.result)
   const played = group.matches.filter(match => match.result)
+  // Players are level until their matches are played; only a finished group has a tie to draw.
+  const finished = isGroupFinished(state, group.id)
   const waiting = groupEntrants(state, group.id).slice(group.playerIds.length)
   const id = `group-${group.id}`
 
@@ -27,7 +29,7 @@ export default function GroupCard({ state, group, flow }: GroupCardProps) {
               <td>{row.rank}.º</td>
               <th scope="row">
                 {playerName(state, row.playerId)}
-                {row.requiresDraw && <> <span className="tag">Empate por sortear</span></>}
+                {finished && row.requiresDraw && <> <span className="tag">Empate por sortear</span></>}
               </th>
               <td>{row.points}</td>
               <td>{row.ballsLeft}</td>

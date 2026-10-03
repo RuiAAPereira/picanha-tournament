@@ -32,6 +32,8 @@ describe('GroupsPage', () => {
     const { user, repository } = await openGroups(fourPlayerState())
     const table = screen.getByRole('table', { name: 'Classificação do Grupo A' })
     expect(within(table).getAllByRole('row')).toHaveLength(5)
+    // Everyone is level before a match is played; that is not yet a tie to draw.
+    expect(screen.queryByText('Empate por sortear')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Registar resultado: Bruno contra Ana' }))
     const dialog = screen.getByRole('dialog', { name: 'Registar resultado' })

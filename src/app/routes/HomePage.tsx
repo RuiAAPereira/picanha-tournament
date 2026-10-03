@@ -27,7 +27,9 @@ export default function HomePage() {
       <h2 id="home-title" tabIndex={-1}>Início</h2>
       {loading && <p>A carregar o torneio guardado…</p>}
       {loadError && <p role="alert" className="error">{loadError}</p>}
-      {state && <p>Torneio em curso: <strong>{state.name}</strong></p>}
+      {state && (championId(state)
+        ? <p>Último torneio: <strong>{state.name}</strong> (terminado)</p>
+        : <p>Torneio em curso: <strong>{state.name}</strong></p>)}
       <div className="actions">
         <button
           type="button"

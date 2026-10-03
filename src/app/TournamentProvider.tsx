@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { drawGroups } from '../domain/formats'
 import {
-  applyMatchResult, correctionImpact, correctMatchResult, createTournamentState, resolveTieDraw,
+  applyMatchResult, correctionImpact, correctMatchResult, createTournamentState, isTournamentState, resolveTieDraw,
   type TieScope, type TournamentState,
 } from '../domain/tournament'
 import { createTauriPresentationController } from '../platform/presentation'
@@ -134,6 +134,8 @@ export function TournamentProvider(props: TournamentProviderProps) {
       try {
         const snapshot = await repository.loadCurrent()
         if (snapshot) takenIds.add(snapshot.tournamentId)
+        // A stored state the screens cannot open counts as a damaged file.
+        if (snapshot && !isTournamentState(snapshot.state)) throw { code: 'corrupt' }
         if (commits === commitsAtStart) {
           current = snapshot?.state ?? null
           setState(current)

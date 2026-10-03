@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import type { UserEvent } from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
+import { proposeFormats } from '../../domain/formats'
 import { renderOperator } from '../testSupport'
 
 const names = (count: number) => Array.from({ length: count }, (_, index) => `Atleta ${index + 1}`)
@@ -47,6 +48,17 @@ describe('NewTournamentPage', () => {
     expect(screen.getByText('O torneio requer 4 a 32 jogadores.')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Criar e sortear' })).toBeDisabled()
     expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+  })
+
+  it('shows the only format and its reason for 7 players', async () => {
+    const ready = proposeFormats(7).filter(proposal => !proposal.creationBlocked)
+    expect(ready).toHaveLength(1)
+    const { user } = await openPage()
+    await addPlayers(user, names(7))
+    const recommended = screen.getByRole('region', { name: /formato recomendado/i })
+    expect(within(recommended).getByText(ready[0].reason)).toBeVisible()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Criar e sortear' })).toBeEnabled()
   })
 
   it('rejects a player whose name matches an existing one', async () => {

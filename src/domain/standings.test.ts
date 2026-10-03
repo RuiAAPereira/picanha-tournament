@@ -84,6 +84,22 @@ describe('calculateStandings', () => {
     ])
   })
 
+  it('re-applies head-to-head inside a partly split tie', () => {
+    // Everyone wins twice; eva leaves more balls. Among the other four the mini-table is
+    // ana 6, bruno 6, carla 3, duarte 3, and each pair still on equal points played each other.
+    const wins: [string, string, number][] = [
+      ['ana', 'bruno', 1], ['ana', 'duarte', 1], ['bruno', 'carla', 1], ['bruno', 'duarte', 1],
+      ['carla', 'ana', 1], ['duarte', 'carla', 1],
+      ['eva', 'ana', 1], ['eva', 'bruno', 1], ['carla', 'eva', 3], ['duarte', 'eva', 3],
+    ]
+    const result = calculateStandings(['ana', 'bruno', 'carla', 'duarte', 'eva'], wins.map(([winner, loser, balls], index) =>
+      recordResult(match(String(index), winner, loser), winner, balls)))
+    expect(result.map(({ playerId, rank, requiresDraw }) => [playerId, rank, requiresDraw])).toEqual([
+      ['ana', 1, false], ['bruno', 2, false], ['duarte', 3, false], ['carla', 4, false], ['eva', 5, false],
+    ])
+    expect(result.map(row => row.headToHeadResult)).toEqual([6, 6, 3, 3, null])
+  })
+
   it('ignores matches outside the supplied player group', () => {
     expect(calculateStandings(['rui', 'sara'], [
       recordResult(match('1', 'rui', 'ana'), 'rui', 4),
