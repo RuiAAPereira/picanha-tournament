@@ -70,7 +70,7 @@ export function TournamentProvider(props: TournamentProviderProps) {
 
   // Created once: `actions` may only call autosave's stable methods, never read its state fields,
   // which would stay frozen at their first-render values here.
-  const [actions] = useState(() => {
+  const [{ actions, onPresentationSignal }] = useState(() => {
     // Latest values, so quick successive actions never build on a stale render.
     let current: TournamentState | null = null
     let pendingSetup: TournamentSetup | null = null
@@ -151,7 +151,14 @@ export function TournamentProvider(props: TournamentProviderProps) {
       }
     }
 
-    return {
+    /** Internal: what the TV side reports, never part of the session. */
+    function onPresentationSignal(signal: PresentationSignal) {
+      if (signal.type === 'muted') return followMuted(signal.muted)
+      presentationOpened = false
+      setPresentationOpen(false)
+    }
+
+    const actions = {
       createTournament(next: TournamentSetup) {
         pendingSetup = next
         setSetup(next)
@@ -206,11 +213,6 @@ export function TournamentProvider(props: TournamentProviderProps) {
           setNotice({ tone: 'warning', text: unavailable ? PRESENTATION_UNAVAILABLE : PRESENTATION_FAILED })
         }
       },
-      onPresentationSignal(signal: PresentationSignal) {
-        if (signal.type === 'muted') return followMuted(signal.muted)
-        presentationOpened = false
-        setPresentationOpen(false)
-      },
       skipPresentation() {
         tellPresentation(presentation => presentation.skip?.())
       },
@@ -243,10 +245,11 @@ export function TournamentProvider(props: TournamentProviderProps) {
         setNotice(null)
       },
     }
+    return { actions, onPresentationSignal }
   })
 
   // The TV tells the operator about its own mute button and about being closed.
-  useEffect(() => deps.current.presentation.subscribe?.(actions.onPresentationSignal), [actions])
+  useEffect(() => deps.current.presentation.subscribe?.(onPresentationSignal), [onPresentationSignal])
 
   // Load once, even when StrictMode runs effects twice.
   const started = useRef(false)

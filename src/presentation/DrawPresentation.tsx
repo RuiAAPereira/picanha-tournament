@@ -5,8 +5,11 @@ import { revealItem } from './Reveal'
 
 const MAX_COLUMNS = 5
 
-/** Two rows of groups where possible, never more than five columns; preliminaries fill the next cells. */
-export const drawColumns = (groupCount: number) => Math.min(MAX_COLUMNS, Math.max(1, Math.ceil(groupCount / 2)))
+/** Two rows of cards (groups and preliminaries) where possible, never more than five columns. */
+export const drawColumns = (cells: number) => Math.min(MAX_COLUMNS, Math.max(1, Math.ceil(cells / 2)))
+
+/** Text lines in the tallest card: the largest group, or a preliminary card (two players and `contra`). */
+const PRELIMINARY_LINES = 3
 
 function GroupCard({ group }: { group: DrawGroupView }) {
   const titleId = useId()
@@ -42,9 +45,13 @@ function PreliminaryCard({ match }: { match: PreliminaryView }) {
  */
 export default function DrawPresentation({ payload }: { payload: DrawPayload }) {
   const cells = payload.groups.length + payload.preliminaryMatches.length
-  const columns = drawColumns(payload.groups.length)
+  const columns = drawColumns(cells)
   const rows = Math.max(1, Math.ceil(cells / columns))
-  const style = { '--cols': columns, '--rows': rows } as CSSProperties
+  const lines = Math.max(
+    ...payload.groups.map(group => group.entrants.length),
+    payload.preliminaryMatches.length > 0 ? PRELIMINARY_LINES : 1,
+  )
+  const style = { '--cols': columns, '--rows': rows, '--lines': lines } as CSSProperties
   return (
     <div className="draw" style={style} data-testid="draw">
       <motion.h1 className="eyebrow" variants={revealItem}>Sorteio</motion.h1>

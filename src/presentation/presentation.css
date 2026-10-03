@@ -107,9 +107,9 @@
 }
 
 .presentation .draw {
-  /* --cols and --rows come from DrawPresentation. Card text shrinks with the rows and columns so the
-     largest formats (10 groups and their preliminaries) still fit one screen. */
-  --card-font: min(calc(78vh / (var(--rows) * 9.5)), calc(88vw / (var(--cols) * 11)), 52px);
+  /* --cols, --rows and --lines (entrants in the tallest card) come from DrawPresentation. A card is about
+     2.9em of title and padding plus 1.4em per line, so its text shrinks until every row fits one screen. */
+  --card-font: min(calc(78vh / (var(--rows) * (2.9 + 1.4 * var(--lines)))), calc(88vw / (var(--cols) * 11)), 52px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: clamp(8px, 2vh, 40px);
@@ -133,6 +133,7 @@
   border-radius: clamp(8px, 0.8vw, 20px);
   background: rgb(0 0 0 / 0.35);
   font-size: var(--card-font);
+  line-height: 1.2;
   text-align: left;
 }
 

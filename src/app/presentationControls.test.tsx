@@ -138,6 +138,7 @@ describe('TV window lifecycle', () => {
     await act(() => session.current!.openPresentation())
     expect(session.current!.presentationOpen).toBe(true)
 
+    expect(session.current).not.toHaveProperty('onPresentationSignal')
     act(() => presentation.signals.listener!({ type: 'closed' }))
     expect(session.current!.presentationOpen).toBe(false)
     act(() => session.current!.recordResult(firstResult(session.current!)))

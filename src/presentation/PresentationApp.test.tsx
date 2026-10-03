@@ -91,14 +91,32 @@ describe('PresentationApp', () => {
     expect(within(preliminary).getByText('Eva')).toBeVisible()
   })
 
-  it('fits the largest draw on one screen: ten groups in five columns, preliminaries in the same grid', () => {
-    const players = Array.from({ length: 32 }, (_, index) => ({ id: `p${index + 1}`, displayName: `Jogador ${index + 1}` }))
-    const proposal = proposeFormats(32).find(candidate => !candidate.creationBlocked && candidate.groupCount === 10) as ReadyProposal
+  function drawFor(playerCount: number, preferredGroupSize: number, pick: (proposal: ReadyProposal) => boolean) {
+    const players = Array.from({ length: playerCount }, (_, index) => ({ id: `p${index + 1}`, displayName: `Jogador ${index + 1}` }))
+    const proposal = proposeFormats(playerCount, preferredGroupSize)
+      .find(candidate => !candidate.creationBlocked && pick(candidate)) as ReadyProposal
     const state = createTournamentState({
       id: 't', name: 'Taça', players, proposal, createdAt: NOW,
       draw: drawGroups(players.map(player => player.id), proposal, () => 0),
     })
-    const projected = projectPresentation(state, { type: 'draw' })
+    return { state, projected: projectPresentation(state, { type: 'draw' }) }
+  }
+
+  it.each([
+    { players: 29, groups: 5, preliminaries: 4, cols: '5', rows: '2' },
+    { players: 11, groups: 2, preliminaries: 1, cols: '2', rows: '2' },
+  ])('sizes five-player groups by their lines: $players players, $groups×5 + $preliminaries', expected => {
+    const { state, projected } = drawFor(expected.players, 5, p => p.groupCount === expected.groups && p.groupSize === 5)
+    expect(state.preliminaryMatches).toHaveLength(expected.preliminaries)
+    render(<PresentationApp initialState={projected} />)
+    const draw = screen.getByTestId('draw')
+    expect(draw.style.getPropertyValue('--lines')).toBe('5')
+    expect(draw.style.getPropertyValue('--cols')).toBe(expected.cols)
+    expect(draw.style.getPropertyValue('--rows')).toBe(expected.rows)
+  })
+
+  it('fits the largest draw on one screen: ten groups in five columns, preliminaries in the same grid', () => {
+    const { state, projected } = drawFor(32, 4, p => p.groupCount === 10)
     render(<PresentationApp initialState={projected} />)
 
     const draw = screen.getByTestId('draw')
