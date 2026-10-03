@@ -314,18 +314,21 @@ describe('sound', () => {
 describe('match spotlight', () => {
   const matchPayload = { stage: 'Grupo A', sides: ['Rui', 'Ana'] as [string, string] }
 
-  it('announces the next match and cycles its templates with a pause in between', () => {
+  it('announces the next match and alternates styles with a pause in between', () => {
     vi.useFakeTimers()
     try {
       render(<PresentationApp initialState={{ kind: 'next', tournamentName: 'Taça', payload: matchPayload }} />)
       const spotlight = () => document.querySelector('.spotlight')!
       expect(screen.getByText('Próximo jogo')).toBeInTheDocument()
       expect(screen.getByText('Rui')).toBeInTheDocument()
-      expect(spotlight()).toHaveAttribute('data-template', '0')
+      const first = spotlight().getAttribute('data-style')
+      expect(['placar', 'confronto']).toContain(first)
       act(() => { vi.advanceTimersByTime(6500) })
       expect(spotlight()).toHaveAttribute('data-resting', 'true')
       act(() => { vi.advanceTimersByTime(2500) })
-      expect(spotlight()).toHaveAttribute('data-template', '1')
+      // The next announcement never repeats the style that just played.
+      expect(spotlight().getAttribute('data-style')).not.toBe(first)
+      expect(spotlight()).toHaveAttribute('data-resting', 'false')
     } finally {
       vi.useRealTimers()
     }
