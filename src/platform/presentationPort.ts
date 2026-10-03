@@ -2,7 +2,7 @@ import type { TournamentState } from '../domain/tournament'
 import type { MatchId } from '../domain/types'
 
 /** The confirmed change that produced a new tournament state. */
-export type SessionEvent = { type: 'draw' | 'result' | 'correction' | 'tie' | 'demo'; matchId?: MatchId }
+export type SessionEvent = { type: 'draw' | 'result' | 'correction' | 'tie' | 'demo' | 'start'; matchId?: MatchId }
 
 /** What the TV side tells the operator: the sound was changed (possibly on the TV), or the TV window closed. */
 export type PresentationSignal = { type: 'muted'; muted: boolean } | { type: 'closed' }

@@ -45,7 +45,12 @@ export type TournamentState = {
   bracket: Bracket
   tieDraws: TieDraw[]
   auditLog: AuditEvent[]
+  /** The match the operator has started and not yet finished; absent while the next match only waits. */
+  liveMatchId?: MatchId
 }
+
+/** The match in the spotlight: `next` waits for the operator to start it, `live` is being played. */
+export type CurrentMatch = { matchId: MatchId; status: 'next' | 'live' }
 
 export type ResultInput = {
   matchId: MatchId
@@ -118,6 +123,51 @@ export function groupStandings(state: TournamentState, groupId: string): GroupSt
 export function isGroupFinished(state: TournamentState, groupId: string): boolean {
   const group = state.groups.find(candidate => candidate.id === groupId)
   return !!group && group.matches.length > 0 && group.matches.every(match => match.result)
+}
+
+const isPlayable = (match: TournamentMatch | KnockoutMatch) =>
+  !match.result && (!isKnockoutMatch(match) || (!!match.homePlayerId && !!match.awayPlayerId))
+
+/**
+ * The first match still to play, in tournament order: preliminaries, then the groups one fixture at a
+ * time in turn (so no group waits for another), then each knockout round. Null when nothing can be played.
+ */
+export function nextMatchId(state: TournamentState): MatchId | null {
+  const preliminary = state.preliminaryMatches.find(isPlayable)
+  if (preliminary) return preliminary.id
+  const rounds = Math.max(0, ...state.groups.map(group => group.matches.length))
+  for (let index = 0; index < rounds; index++) {
+    for (const group of state.groups) {
+      const match = group.matches[index]
+      if (match && isPlayable(match)) return match.id
+    }
+  }
+  for (const round of state.bracket.rounds) {
+    const match = round.matches.find(isPlayable)
+    if (match) return match.id
+  }
+  return null
+}
+
+/** The started match if it can still be played, otherwise the next one. */
+export function currentMatch(state: TournamentState): CurrentMatch | null {
+  const live = state.liveMatchId ? findMatch(state, state.liveMatchId) : undefined
+  if (live && isPlayable(live)) return { matchId: live.id, status: 'live' }
+  const next = nextMatchId(state)
+  return next ? { matchId: next, status: 'next' } : null
+}
+
+/** Marks the current match as started. */
+export function startCurrentMatch(state: TournamentState): TournamentState {
+  const current = currentMatch(state)
+  if (!current) throw new Error('Não há jogo para iniciar.')
+  return { ...state, liveMatchId: current.matchId }
+}
+
+/** Takes a started match back to waiting. */
+export function stopLiveMatch(state: TournamentState): TournamentState {
+  const { liveMatchId: _live, ...rest } = state
+  return rest
 }
 
 /** Any preliminary, group or knockout match by id. */
@@ -221,10 +271,12 @@ function outcomes(state: TournamentState): GroupOutcome[] {
 function derive(state: TournamentState): TournamentState {
   const groups = state.groups.map(group => placeGroup(state, group))
   const placed = { ...state, groups }
-  return {
+  const derived = {
     ...placed,
     bracket: resolveBracket(state.bracket, outcomes(placed), drawsFor(placed, { type: 'runnersUp' })),
   }
+  // A started match that was played or undone by a correction is no longer live.
+  return derived.liveMatchId && currentMatch(derived)?.status !== 'live' ? stopLiveMatch(derived) : derived
 }
 
 function placeGroup(state: TournamentState, group: TournamentGroup): TournamentGroup {

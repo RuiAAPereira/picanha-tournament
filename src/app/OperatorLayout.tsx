@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import CurrentMatchPanel from './components/CurrentMatchPanel'
 import PresentationControls from './components/PresentationControls'
 import { ROUTES } from './hashRoute'
 import { useTournamentSession } from './useTournamentSession'
@@ -62,6 +63,8 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
           <button type="button" onClick={session.dismissNotice}>Fechar aviso</button>
         </div>
       )}
+
+      {state && (route === ROUTES.groups || route === ROUTES.bracket || route === ROUTES.draw) && <CurrentMatchPanel />}
 
       {children}
     </main>

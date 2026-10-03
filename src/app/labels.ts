@@ -50,6 +50,12 @@ export function matchSides(state: TournamentState, match: TournamentMatch | Knoc
 export const sidesText = (state: TournamentState, match: TournamentMatch | KnockoutMatch) =>
   matchSides(state, match).join(' contra ')
 
+/** Where a match is played, short enough for the TV: `Grupo A`, `Pré-eliminatória 1`, `Meias-finais`. */
+export function matchStage(state: TournamentState, match: TournamentMatch | KnockoutMatch): string {
+  if (isKnockoutMatch(match)) return roundName(state, match.round)
+  return match.groupId ? `Grupo ${match.groupId}` : preliminaryName(state, match.id)
+}
+
 /** Where a match belongs and who plays it, e.g. `Grupo A: Ana contra Rui` or `Final: Ana contra Rui`. */
 export function matchLabel(state: TournamentState, matchId: MatchId): string {
   const match = findMatch(state, matchId)

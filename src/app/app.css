@@ -229,3 +229,9 @@
 @media (prefers-reduced-motion: reduce) {
   .operator *, .operator *::before, .operator *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+.operator .current-match { margin: 12px 0; }
+.operator .current-match h3 { margin-top: 0; }
+.operator .current-match.is-live { border-color: #b8453b; }
+.operator .current-match-sides { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 1.1rem; }
+.operator .current-match .caption { color: var(--muted); }
