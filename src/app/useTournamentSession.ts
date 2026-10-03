@@ -42,8 +42,8 @@ export type TournamentSession = {
   correctResult(entry: ResultEntry, confirmed?: boolean): CorrectionOutcome
   resolveTie(scope: TieScope): void
   loadDemo(): void
-  /** Opens the TV window on `display`, or moves it there when open; a failure only warns. */
-  openPresentation(display?: string): Promise<void>
+  /** Opens the TV window on `display`, or moves it there when open; a failure only warns. Resolves whether it worked. */
+  openPresentation(display?: string): Promise<boolean>
   /** Closes the TV window; `presentationOpen` turns false once it reports it is gone. */
   closePresentation(): Promise<void>
   /** The connected displays; none outside the app or when they cannot be read. */

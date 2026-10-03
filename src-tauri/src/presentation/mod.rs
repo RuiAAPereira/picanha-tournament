@@ -104,6 +104,8 @@ pub fn open_presentation_window<R: Runtime>(
         // A half-placed window would hold the label; the next open starts clean.
         let _ = window.destroy();
     }
+    // A failed move of an open window keeps it, possibly out of fullscreen or between screens: it
+    // still shows the tournament, and choosing a display and moving it again puts it right.
     placed?;
     store.remember_display(target.id());
     Ok(())

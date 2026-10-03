@@ -72,7 +72,7 @@ pub fn describe_display(
 }
 
 /// What `requested` means given the connected displays; without a request, the display last chosen
-/// in this session, else the first one that is not the primary, else a window.
+/// in this session, else the preferred secondary display, else a window.
 pub fn choose_target(
     requested: Option<&str>,
     remembered: Option<&str>,
@@ -87,18 +87,22 @@ pub fn choose_target(
             Some(WINDOWED) => Target::Windowed,
             Some(id) if listed(id) => Target::Display(id.to_string()),
             // A remembered display that is gone falls back quietly: nobody asked for it this time.
-            _ => first_secondary(displays),
+            _ => preferred_secondary(displays),
         }),
     }
 }
 
-fn first_secondary(displays: &[PresentationDisplay]) -> Target {
-    if displays.len() < 2 {
-        return Target::Windowed;
-    }
-    displays
-        .iter()
-        .find(|display| !display.primary)
+/// The display most like a TV: the largest landscape one that is not the primary, else any that is
+/// not the primary, else a window. Mirrored by `preferredDisplay` in PresentationControls.tsx.
+fn preferred_secondary(displays: &[PresentationDisplay]) -> Target {
+    let area = |display: &&PresentationDisplay| u64::from(display.width) * u64::from(display.height);
+    let secondary = || displays.iter().filter(|display| !display.primary);
+    secondary()
+        .filter(|display| display.width >= display.height)
+        // Reversed, so the first of equally large displays wins.
+        .rev()
+        .max_by_key(area)
+        .or_else(|| secondary().next())
         .map_or(Target::Windowed, |display| Target::Display(display.id.clone()))
 }
 
@@ -107,11 +111,15 @@ mod tests {
     use super::*;
 
     fn display(id: &str, primary: bool) -> PresentationDisplay {
+        sized(id, 1920, 1080, primary)
+    }
+
+    fn sized(id: &str, width: u32, height: u32, primary: bool) -> PresentationDisplay {
         PresentationDisplay {
             id: id.into(),
             label: "Ecrã".into(),
-            width: 1920,
-            height: 1080,
+            width,
+            height,
             x: 0,
             y: 0,
             primary,
@@ -182,16 +190,30 @@ mod tests {
     }
 
     #[test]
-    fn without_a_request_or_a_remembered_display_the_first_secondary_is_used() {
+    fn without_a_request_or_a_remembered_display_a_secondary_is_used() {
         let displays = [display("main", true), display("one", false), display("tv", false)];
         assert_eq!(choose_target(None, None, &displays).unwrap(), Target::Display("one".into()));
         assert_eq!(choose_target(None, Some("gone"), &displays).unwrap(), Target::Display("one".into()));
     }
 
     #[test]
-    fn a_single_display_gets_a_window() {
+    fn the_largest_landscape_secondary_is_preferred() {
+        let operator = [sized("one", 1080, 1920, false), sized("two", 3440, 1440, true)];
+        assert_eq!(choose_target(None, None, &operator).unwrap(), Target::Display("one".into()));
+        let with_tv = [operator[0].clone(), operator[1].clone(), sized("tv", 1920, 1080, false)];
+        assert_eq!(choose_target(None, None, &with_tv).unwrap(), Target::Display("tv".into()));
+        let two_tvs = [sized("small", 1280, 720, false), sized("big", 3840, 2160, false), sized("same", 3840, 2160, false)];
+        assert_eq!(choose_target(None, None, &two_tvs).unwrap(), Target::Display("big".into()));
+    }
+
+    #[test]
+    fn a_lone_secondary_is_used_even_without_a_primary() {
+        assert_eq!(choose_target(None, None, &[display("unknown", false)]).unwrap(), Target::Display("unknown".into()));
+    }
+
+    #[test]
+    fn without_a_secondary_display_a_window_is_used() {
         assert_eq!(choose_target(None, None, &[display("main", true)]).unwrap(), Target::Windowed);
-        assert_eq!(choose_target(None, None, &[display("unknown", false)]).unwrap(), Target::Windowed);
         assert_eq!(choose_target(None, None, &[]).unwrap(), Target::Windowed);
         assert_eq!(
             choose_target(None, None, &[display("a", true), display("b", true)]).unwrap(),

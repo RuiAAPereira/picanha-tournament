@@ -203,7 +203,7 @@ export function TournamentProvider(props: TournamentProviderProps) {
         const loaded = demo()
         commit({ ...loaded, id: newId(loaded.name, deps.current.now()) }, { type: 'demo' })
       },
-      async openPresentation(display?: string) {
+      async openPresentation(display?: string): Promise<boolean> {
         try {
           const { presentation } = deps.current
           await presentation.open(display)
@@ -212,19 +212,22 @@ export function TournamentProvider(props: TournamentProviderProps) {
           setPresentationDisplay(display ?? null)
           // The TV may have changed the sound before it was closed; show the stored setting.
           presentation.readMuted?.().then(followMuted).catch(() => {})
+          return true
         } catch (error) {
-          // A missing or closed display never stops the tournament; only the known message is shown as is.
+          // A missing or closed display never stops the tournament; only the known messages are shown as is.
           const unavailable = error instanceof Error && error.message === PRESENTATION_UNAVAILABLE
-          if (!unavailable) console.error('[presentation]', error)
           const missing = (error as { code?: unknown } | null)?.code === 'display_missing'
+          if (!unavailable && !missing) console.error('[presentation]', error)
           const text = unavailable ? PRESENTATION_UNAVAILABLE : missing ? (error as { message: string }).message : PRESENTATION_FAILED
           setNotice({ tone: 'warning', text })
+          return false
         }
       },
       async closePresentation() {
-        // The controls go once the TV window reports it is gone (`closed`).
         try {
           await deps.current.presentation.close?.()
+          // Quiet about updates at once; the controls go once the TV window reports `closed`.
+          presentationOpened = false
         } catch (error) {
           console.error('[presentation]', error)
           setNotice({ tone: 'warning', text: PRESENTATION_CLOSE_FAILED })
