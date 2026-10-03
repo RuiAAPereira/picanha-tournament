@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { proposeFormats, type DrawResult, type ReadyProposal } from './formats'
+import { fourPlayerState, playGroups } from '../app/testSupport'
+import { drawGroups, proposeFormats, type DrawResult, type ReadyProposal } from './formats'
 import {
-  applyMatchResult, correctionImpact, correctMatchResult, createTournamentState, findMatch, groupStandings,
+  applyMatchResult, currentMatch, startCurrentMatch, stopLiveMatch, correctionImpact, correctMatchResult, createTournamentState, findMatch, groupStandings,
   isGroupFinished, isKnockoutMatch, pendingTieScopes, resolveTieDraw, type ResultInput, type TournamentState,
 } from './tournament'
 import type { MatchId, PlayerId } from './types'
@@ -422,3 +423,44 @@ function withTieDrawn(drawn = true): TournamentState {
   }
   return drawn ? resolveTieDraw(state, { type: 'group', groupId: 'A' }, () => 0.7, LATER) : state
 }
+
+describe('current match', () => {
+  const at = '2026-10-03T20:00:00.000Z'
+
+  it('starts on the first group match, can be started, and moves on once a result is recorded', () => {
+    const state = fourPlayerState()
+    const [first, second] = state.groups[0].matches
+    expect(currentMatch(state)).toEqual({ matchId: first.id, status: 'next' })
+
+    const live = startCurrentMatch(state)
+    expect(currentMatch(live)).toEqual({ matchId: first.id, status: 'live' })
+    expect(currentMatch(stopLiveMatch(live))).toEqual({ matchId: first.id, status: 'next' })
+
+    const played = applyMatchResult(live, { matchId: first.id, winnerId: first.player1Id, loserBallsRemaining: 1, at })
+    expect(played.liveMatchId).toBeUndefined()
+    expect('liveMatchId' in played).toBe(false)
+    expect(currentMatch(played)).toEqual({ matchId: second.id, status: 'next' })
+  })
+
+  it('goes on to the final, then to nothing once there is a champion', () => {
+    const groupsDone = playGroups(fourPlayerState(), ['ana', 'bruno', 'carla', 'duarte'])
+    const final = groupsDone.bracket.rounds.at(-1)!.matches[0]
+    expect(currentMatch(groupsDone)).toEqual({ matchId: final.id, status: 'next' })
+    const finished = applyMatchResult(groupsDone, { matchId: final.id, winnerId: 'ana', loserBallsRemaining: 0, at })
+    expect(currentMatch(finished)).toBeNull()
+    expect(() => startCurrentMatch(finished)).toThrow()
+  })
+
+  it('plays preliminaries first and interleaves the groups', () => {
+    const players = ['Ana', 'Bruno', 'Carla', 'Duarte', 'Eva', 'Filipe', 'Gil', 'Hugo'].map(name => ({ id: name.toLowerCase(), displayName: name }))
+    const proposal = proposeFormats(8).find(candidate => !candidate.creationBlocked && candidate.groupCount === 2) as ReadyProposal
+    const state = createTournamentState({
+      id: 't', name: 'T', players, proposal, createdAt: at,
+      draw: drawGroups(players.map(player => player.id), proposal, () => 0),
+    })
+    const [a, b] = state.groups
+    expect(currentMatch(state)!.matchId).toBe(a.matches[0].id)
+    const afterFirst = applyMatchResult(state, { matchId: a.matches[0].id, winnerId: a.matches[0].player1Id, loserBallsRemaining: 1, at })
+    expect(currentMatch(afterFirst)!.matchId).toBe(b.matches[0].id)
+  })
+})

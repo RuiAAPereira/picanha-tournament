@@ -90,7 +90,7 @@ describe('createTauriPresentationController', () => {
     await controller.seed(fourPlayerState())
     await controller.seed(finished)
     expect(updates(invoke)).toEqual([
-      { seq: 100, reveal: false, state: idle },
+      { seq: 100, reveal: false, state: expect.objectContaining({ kind: 'next' }) },
       { seq: 101, reveal: false, state: { kind: 'champion', tournamentName: 'Torneio', payload: { champion: 'Ana', runnerUp: 'Bruno' } } },
     ])
   })

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { drawGroups } from '../domain/formats'
 import {
   applyMatchResult, correctionImpact, correctMatchResult, createTournamentState, isTournamentState, resolveTieDraw,
+  startCurrentMatch, stopLiveMatch,
   type TieScope, type TournamentState,
 } from '../domain/tournament'
 import { createTauriPresentationController } from '../platform/presentation'
@@ -194,6 +195,12 @@ export function TournamentProvider(props: TournamentProviderProps) {
       resolveTie(scope: TieScope) {
         const { random, now } = deps.current
         commit(resolveTieDraw(requireState(), scope, random, now()), { type: 'tie' })
+      },
+      startMatch() {
+        commit(startCurrentMatch(requireState()), { type: 'start' })
+      },
+      cancelMatch() {
+        commit(stopLiveMatch(requireState()), { type: 'start' })
       },
       loadDemo() {
         const { demo } = deps.current

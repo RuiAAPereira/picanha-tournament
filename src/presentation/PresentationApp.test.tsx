@@ -310,3 +310,44 @@ describe('sound', () => {
     expect(screen.queryByText('Clique no ecrã para ativar o som')).not.toBeInTheDocument()
   })
 })
+
+describe('match spotlight', () => {
+  const matchPayload = { stage: 'Grupo A', sides: ['Rui', 'Ana'] as [string, string] }
+
+  it('announces the next match and cycles its templates with a pause in between', () => {
+    vi.useFakeTimers()
+    try {
+      render(<PresentationApp initialState={{ kind: 'next', tournamentName: 'Taça', payload: matchPayload }} />)
+      const spotlight = () => document.querySelector('.spotlight')!
+      expect(screen.getByText('Próximo jogo')).toBeInTheDocument()
+      expect(screen.getByText('Rui')).toBeInTheDocument()
+      expect(spotlight()).toHaveAttribute('data-template', '0')
+      act(() => { vi.advanceTimersByTime(6500) })
+      expect(spotlight()).toHaveAttribute('data-resting', 'true')
+      act(() => { vi.advanceTimersByTime(2500) })
+      expect(spotlight()).toHaveAttribute('data-template', '1')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows a started match as live', () => {
+    render(<PresentationApp initialState={{ kind: 'live', tournamentName: 'Taça', payload: matchPayload }} />)
+    expect(screen.getByText('A decorrer')).toBeInTheDocument()
+    expect(screen.getByText('Ana')).toBeInTheDocument()
+  })
+
+  it('moves on from a result to the next match after a while', () => {
+    vi.useFakeTimers()
+    try {
+      const state = withResult({ next: matchPayload })
+      render(<PresentationApp initialState={state} />)
+      expect(screen.queryByText('Próximo jogo')).not.toBeInTheDocument()
+      act(() => { vi.advanceTimersByTime(10_000) })
+      expect(screen.getByText('Próximo jogo')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+

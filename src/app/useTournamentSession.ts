@@ -41,6 +41,10 @@ export type TournamentSession = {
   /** Without `confirmed`, a correction that would undo later matches is not applied but reported. */
   correctResult(entry: ResultEntry, confirmed?: boolean): CorrectionOutcome
   resolveTie(scope: TieScope): void
+  /** Starts the current match: the TV changes from announcing it to showing it live. */
+  startMatch(): void
+  /** Takes the started match back to waiting as the next match. */
+  cancelMatch(): void
   loadDemo(): void
   /** Opens the TV window on `display`, or moves it there when open; a failure only warns. Resolves whether it worked. */
   openPresentation(display?: string): Promise<boolean>

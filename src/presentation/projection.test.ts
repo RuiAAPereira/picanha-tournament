@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fourPlayerState, NOW, playGroups } from '../app/testSupport'
 import { drawGroups, proposeFormats, type ReadyProposal } from '../domain/formats'
-import { applyMatchResult, correctMatchResult, createTournamentState, type TournamentState } from '../domain/tournament'
+import { applyMatchResult, correctMatchResult, createTournamentState, startCurrentMatch, type TournamentState } from '../domain/tournament'
 import { projectPresentation, projectResting } from './projection'
 
 const ORDER = ['ana', 'bruno', 'carla', 'duarte']
@@ -50,6 +50,7 @@ describe('projectPresentation', () => {
         loserBallsRemaining: 2,
         withdrawal: false,
         corrected: false,
+        next: { stage: 'Grupo A', sides: expect.any(Array) },
       },
     })
   })
@@ -99,18 +100,26 @@ describe('projectPresentation', () => {
     })
   })
 
-  it('stays idle for tie draws, the demonstration and results it cannot find', () => {
+  it('announces the next match after a draw, and shows a started match live', () => {
+    const state = fourPlayerState()
+    const first = state.groups[0].matches[0]
+    const sides = [first.player1Id, first.player2Id].map(id => state.players.find(player => player.id === id)!.displayName)
+    const draw = projectPresentation(state, { type: 'draw' })
+    expect(draw).toMatchObject({ kind: 'draw', payload: { next: { stage: 'Grupo A', sides } } })
+    expect(projectResting(state)).toEqual({ kind: 'next', tournamentName: 'Torneio', payload: { stage: 'Grupo A', sides } })
+    expect(projectPresentation(startCurrentMatch(state), { type: 'start' }))
+      .toEqual({ kind: 'live', tournamentName: 'Torneio', payload: { stage: 'Grupo A', sides } })
+  })
+
+  it('stays idle for results it cannot find', () => {
     const state = fourPlayerState()
     const idle = { kind: 'idle', tournamentName: 'Torneio', payload: null }
-    expect(projectPresentation(state, { type: 'tie' })).toEqual(idle)
-    expect(projectPresentation(state, { type: 'demo' })).toEqual(idle)
     expect(projectPresentation(state, { type: 'result', matchId: 'nenhum' })).toEqual(idle)
     expect(projectPresentation(state, { type: 'result', matchId: state.groups[0].matches[0].id })).toEqual(idle)
   })
 
-  it('rests on the tournament name, or on the champion once the final is decided', () => {
+  it('rests on the champion once the final is decided', () => {
     const state = fourPlayerState()
-    expect(projectResting(state)).toEqual({ kind: 'idle', tournamentName: 'Torneio', payload: null })
     const groupsDone = playGroups(state, ORDER)
     const final = groupsDone.bracket.rounds.at(-1)!.matches[0]
     expect(projectResting(play(groupsDone, final.id, 'ana', 0)))

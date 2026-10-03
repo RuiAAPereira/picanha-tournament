@@ -1,8 +1,8 @@
-import { championId, matchSides, playerName, preliminaryName, roundName } from '../app/labels'
-import { findMatch, isKnockoutMatch, type TournamentState } from '../domain/tournament'
+import { championId, matchSides, matchStage, playerName, preliminaryName } from '../app/labels'
+import { currentMatch, findMatch, isKnockoutMatch, type TournamentState } from '../domain/tournament'
 import type { PlayerId } from '../domain/types'
 import type { SessionEvent } from '../platform/presentationPort'
-import type { DrawEntrant, PresentationState } from './presentationState'
+import type { DrawEntrant, MatchPayload, PresentationState } from './presentationState'
 
 const idle = (state: TournamentState): PresentationState =>
   ({ kind: 'idle', tournamentName: state.name, payload: null })
@@ -22,6 +22,20 @@ function drawEntrants(state: TournamentState, groupId: string): DrawEntrant[] {
   ]
 }
 
+/** The match to announce or show live, from the operator's current match. */
+function spotlight(state: TournamentState): { status: 'next' | 'live'; payload: MatchPayload } | null {
+  const current = currentMatch(state)
+  const match = current && findMatch(state, current.matchId)
+  if (!current || !match) return null
+  return { status: current.status, payload: { stage: matchStage(state, match), sides: matchSides(state, match) } }
+}
+
+const nextOf = (state: TournamentState) => {
+  const current = spotlight(state)
+  // After a draw or a result nothing has started yet, so the announcement is always "next".
+  return current?.status === 'next' ? current.payload : null
+}
+
 function projectDraw(state: TournamentState): PresentationState {
   return {
     kind: 'draw',
@@ -33,6 +47,7 @@ function projectDraw(state: TournamentState): PresentationState {
         shortLabel: `PE ${index + 1}`,
         sides: matchSides(state, match),
       })),
+      next: nextOf(state),
     },
   }
 }
@@ -58,22 +73,23 @@ function projectResult(state: TournamentState, event: SessionEvent): Presentatio
     kind: 'result',
     tournamentName: state.name,
     payload: {
-      stage: knockout
-        ? roundName(state, match.round)
-        : match.groupId ? `Grupo ${match.groupId}` : preliminaryName(state, match.id),
+      stage: matchStage(state, match),
       winner: playerName(state, result.winnerId),
       loser: playerName(state, loserId),
       loserBallsRemaining: result.loserBallsRemaining,
       withdrawal: result.kind === 'withdrawal',
       corrected: event.type === 'correction',
+      next: nextOf(state),
     },
   }
 }
 
-/** What the TV shows between changes, e.g. after the operator resumes a saved tournament: the champion or the name. */
+/** What the TV shows between changes, e.g. after the operator resumes a saved tournament: the champion, the current match or the name. */
 export function projectResting(state: TournamentState): PresentationState {
   const champion = championId(state)
-  return champion ? projectChampion(state, champion) : idle(state)
+  if (champion) return projectChampion(state, champion)
+  const current = spotlight(state)
+  return current ? { kind: current.status, tournamentName: state.name, payload: current.payload } : idle(state)
 }
 
 /** What the TV shows after a confirmed change: names and labels only, never the whole tournament. */
@@ -86,7 +102,8 @@ export function projectPresentation(state: TournamentState, event: SessionEvent)
       const champion = championId(state)
       return champion ? projectChampion(state, champion) : projectResult(state, event)
     }
+    case 'start':
     case 'tie':
-    case 'demo': return idle(state)
+    case 'demo': return projectResting(state)
   }
 }
