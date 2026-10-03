@@ -1,56 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fakeAudioContext } from '../test/fakeAudioContext'
 import { createRevealSound, SOUND_VOLUME } from './sound'
-
-class FakeParam {
-  value = 1
-  setValueAtTime = vi.fn()
-  exponentialRampToValueAtTime = vi.fn()
-}
-class FakeNode {
-  gain = new FakeParam()
-  frequency = new FakeParam()
-  type = 'sine'
-  connect = vi.fn(() => this)
-  start = vi.fn()
-  stop = vi.fn()
-}
-const contexts: FakeContext[] = []
-class FakeContext {
-  currentTime = 0
-  state = 'running'
-  destination = {}
-  gains: FakeNode[] = []
-  oscillators: FakeNode[] = []
-  constructor() {
-    contexts.push(this)
-  }
-  createGain() {
-    const node = new FakeNode()
-    this.gains.push(node)
-    return node
-  }
-  createOscillator() {
-    const node = new FakeNode()
-    this.oscillators.push(node)
-    return node
-  }
-  resume = vi.fn(async () => {})
-}
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  contexts.length = 0
 })
 
 describe('createRevealSound', () => {
-  it('starts unmuted at 40% volume and mutes through the master gain', () => {
-    vi.stubGlobal('AudioContext', FakeContext)
+  it('starts unmuted at 40% volume and mutes through the master gain', async () => {
+    const audio = fakeAudioContext('running')
+    vi.stubGlobal('AudioContext', audio.FakeContext)
     const sound = createRevealSound()
-    sound.play()
-    const master = contexts[0].gains[0]
+    await sound.play()
+    const master = audio.contexts[0].gains[0]
     expect(SOUND_VOLUME).toBe(0.4)
     expect(master.gain.value).toBe(0.4)
-    expect(contexts[0].oscillators.length).toBeGreaterThan(0)
+    expect(audio.contexts[0].oscillators).toHaveLength(3)
 
     sound.setMuted(true)
     expect(master.gain.value).toBe(0)
@@ -58,19 +23,45 @@ describe('createRevealSound', () => {
     expect(master.gain.value).toBe(0.4)
   })
 
-  it('stays silent without playing anything while muted', () => {
-    vi.stubGlobal('AudioContext', FakeContext)
+  it('stays silent without playing anything while muted', async () => {
+    const audio = fakeAudioContext('running')
+    vi.stubGlobal('AudioContext', audio.FakeContext)
     const sound = createRevealSound()
     sound.setMuted(true)
-    sound.play()
-    expect(contexts.every(context => context.oscillators.length === 0)).toBe(true)
+    await sound.play()
+    expect(audio.contexts.every(context => context.oscillators.length === 0)).toBe(true)
   })
 
-  it('never throws where Web Audio is missing', () => {
+  it('drops the cue while the webview holds sound back, and plays once after a gesture', async () => {
+    const audio = fakeAudioContext('suspended')
+    vi.stubGlobal('AudioContext', audio.FakeContext)
+    const sound = createRevealSound()
+    const changed = vi.fn()
+    sound.subscribe(changed)
+    sound.prepare()
+    expect(sound.needsGesture()).toBe(true)
+
+    await sound.play()
+    expect(audio.contexts[0].oscillators).toHaveLength(0)
+
+    audio.gate.allowed = true
+    await sound.unlock()
+    expect(sound.needsGesture()).toBe(false)
+    expect(changed).toHaveBeenCalled()
+    // The dropped cue never plays late.
+    expect(audio.contexts[0].oscillators).toHaveLength(0)
+    await sound.play()
+    expect(audio.contexts[0].oscillators).toHaveLength(3)
+  })
+
+  it('never throws where Web Audio is missing', async () => {
     vi.stubGlobal('AudioContext', undefined)
     const sound = createRevealSound()
+    sound.prepare()
+    await sound.play()
+    await sound.unlock()
+    expect(sound.needsGesture()).toBe(false)
     expect(() => {
-      sound.play()
       sound.setMuted(true)
       sound.close()
     }).not.toThrow()

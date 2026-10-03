@@ -1,8 +1,13 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { NOW } from '../app/testSupport'
+import { drawGroups, proposeFormats, type ReadyProposal } from '../domain/formats'
+import { createTournamentState } from '../domain/tournament'
+import { fakeAudioContext } from '../test/fakeAudioContext'
 import PresentationApp from './PresentationApp'
-import type { PresentationSnapshot, PresentationState } from './presentationState'
+import type { PresentationSnapshot, PresentationState, PresentationUpdate } from './presentationState'
+import { projectPresentation } from './projection'
 
 const tauri = vi.hoisted(() => ({
   invoke: vi.fn(async (_command: string, _args?: unknown): Promise<unknown> => null),
@@ -19,6 +24,9 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 const emit = (event: string, payload: unknown) => act(() => tauri.handlers.get(event)!({ payload }))
+const update = (state: PresentationState, seq: number, reveal = true): PresentationUpdate => ({ seq, reveal, state })
+const snapshot = (published: PresentationUpdate | null, muted = false): PresentationSnapshot => ({ update: published, muted })
+const listening = () => vi.waitFor(() => expect(tauri.handlers.size).toBe(3))
 
 const resultState: PresentationState = {
   kind: 'result',
@@ -32,7 +40,10 @@ const drawState: PresentationState = {
   kind: 'draw',
   tournamentName: 'Taça da Picanha',
   payload: {
-    groups: [{ id: 'A', entrants: ['Rui', 'Ana', 'Vencedor da Pré-eliminatória 1'] }],
+    groups: [{
+      id: 'A',
+      entrants: [{ name: 'Rui' }, { name: 'Ana' }, { name: 'Vencedor PE 1', description: 'Vencedor da Pré-eliminatória 1' }],
+    }],
     preliminaryMatches: [{ label: 'Pré-eliminatória 1', sides: ['Eva', 'Gil'] }],
   },
 }
@@ -45,6 +56,10 @@ beforeEach(() => {
   tauri.unlisten.mockClear()
   tauri.invoke.mockReset()
   tauri.invoke.mockImplementation(async () => null)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('PresentationApp', () => {
@@ -66,13 +81,32 @@ describe('PresentationApp', () => {
     expect(screen.queryByText(/bolas?\b/)).not.toBeInTheDocument()
   })
 
-  it('shows the draw with its groups and preliminary matches', () => {
+  it('shows the draw with its groups, short placeholders and preliminary matches', () => {
     render(<PresentationApp initialState={drawState} />)
     const group = screen.getByRole('region', { name: 'Grupo A' })
-    expect(within(group).getByText('Vencedor da Pré-eliminatória 1')).toBeVisible()
+    expect(within(group).getByText('Vencedor PE 1')).toBeVisible()
+    expect(within(group).getByRole('listitem', { name: 'Vencedor da Pré-eliminatória 1' })).toBeVisible()
     expect(within(group).getByText('Rui')).toBeVisible()
-    expect(screen.getByText('Pré-eliminatória 1')).toBeVisible()
-    expect(screen.getByText('Eva')).toBeVisible()
+    const preliminary = screen.getByRole('region', { name: 'Pré-eliminatória 1' })
+    expect(within(preliminary).getByText('Eva')).toBeVisible()
+  })
+
+  it('fits the largest draw on one screen: ten groups in five columns, preliminaries in the same grid', () => {
+    const players = Array.from({ length: 32 }, (_, index) => ({ id: `p${index + 1}`, displayName: `Jogador ${index + 1}` }))
+    const proposal = proposeFormats(32).find(candidate => !candidate.creationBlocked && candidate.groupCount === 10) as ReadyProposal
+    const state = createTournamentState({
+      id: 't', name: 'Taça', players, proposal, createdAt: NOW,
+      draw: drawGroups(players.map(player => player.id), proposal, () => 0),
+    })
+    const projected = projectPresentation(state, { type: 'draw' })
+    render(<PresentationApp initialState={projected} />)
+
+    const draw = screen.getByTestId('draw')
+    expect(draw.style.getPropertyValue('--cols')).toBe('5')
+    expect(draw.style.getPropertyValue('--rows')).toBe(String(Math.ceil((10 + state.preliminaryMatches.length) / 5)))
+    expect(screen.getAllByRole('region')).toHaveLength(10 + state.preliminaryMatches.length)
+    // One fixed screen: the page itself never grows or scrolls.
+    expect(screen.getByRole('main').className).toBe('presentation')
   })
 
   it('shows the champion and the runner-up', () => {
@@ -92,32 +126,40 @@ describe('PresentationApp', () => {
 })
 
 describe('live updates', () => {
-  const snapshot = (state: PresentationState | null, muted = false): PresentationSnapshot => ({ state, muted })
-
-  it('fetches the last state on mount and follows published states', async () => {
-    tauri.invoke.mockResolvedValue(snapshot(resultState))
+  it('fetches the last update on mount and follows published ones', async () => {
+    tauri.invoke.mockResolvedValue(snapshot(update(resultState, 1)))
     const { unmount } = render(<PresentationApp />)
     expect(await screen.findByText('Rui')).toBeVisible()
     expect(tauri.invoke).toHaveBeenCalledWith('get_presentation_state')
 
-    emit('presentation-state', championState)
+    emit('presentation-state', update(championState, 2))
     expect(await screen.findByText('Campeão')).toBeInTheDocument()
     unmount()
     await vi.waitFor(() => expect(tauri.unlisten).toHaveBeenCalledTimes(3))
   })
 
-  it('keeps a published state that arrives before the initial fetch', async () => {
+  it('keeps the newest update whatever order the event and the initial read arrive in', async () => {
     let answer!: (value: PresentationSnapshot) => void
     tauri.invoke.mockImplementation(() => new Promise(resolve => { answer = resolve }))
     render(<PresentationApp />)
     await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith('get_presentation_state'))
-    emit('presentation-state', championState)
-    await act(async () => answer(snapshot(resultState)))
+    emit('presentation-state', update(championState, 5))
+    await act(async () => answer(snapshot(update(resultState, 4))))
     expect(screen.getByText('Campeão')).toBeInTheDocument()
     expect(screen.queryByText('Grupo A')).not.toBeInTheDocument()
   })
 
-  it('reads the last state only once every listener is registered', async () => {
+  it('drops a published update older than the one shown', async () => {
+    tauri.invoke.mockResolvedValue(snapshot(null))
+    render(<PresentationApp />)
+    await listening()
+    emit('presentation-state', update(championState, 9))
+    emit('presentation-state', update(resultState, 8))
+    expect(screen.getByText('Campeão')).toBeInTheDocument()
+    expect(screen.queryByText('Grupo A')).not.toBeInTheDocument()
+  })
+
+  it('reads the last update only once every listener is registered', async () => {
     let listenersAtFetch = -1
     tauri.invoke.mockImplementation(async () => {
       listenersAtFetch = tauri.handlers.size
@@ -137,10 +179,9 @@ describe('live updates', () => {
   it('plays the reveal of a new state and completes it at once when skipped', async () => {
     tauri.invoke.mockResolvedValue(snapshot(null))
     render(<PresentationApp />)
-    await vi.waitFor(() => expect(tauri.handlers.has('presentation-skip')).toBe(true))
-    emit('presentation-state', resultState)
-    const reveal = screen.getByTestId('reveal')
-    expect(reveal).toHaveAttribute('data-reveal', 'playing')
+    await listening()
+    emit('presentation-state', update(resultState, 1))
+    expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'playing')
 
     emit('presentation-skip', null)
     expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'done')
@@ -148,24 +189,35 @@ describe('live updates', () => {
     expect(screen.getByText(/2 bolas/)).toBeVisible()
   })
 
+  it('shows an update published without a reveal at once', async () => {
+    tauri.invoke.mockResolvedValue(snapshot(null))
+    render(<PresentationApp />)
+    await listening()
+    emit('presentation-state', update(championState, 1, false))
+    expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'done')
+    expect(screen.getByText('Campeão')).toBeVisible()
+  })
+
   it('lets the reveal play for 2 to 5 seconds before it completes on its own', async () => {
     tauri.invoke.mockResolvedValue(snapshot(null))
     render(<PresentationApp />)
-    await vi.waitFor(() => expect(tauri.handlers.has('presentation-state')).toBe(true))
-    emit('presentation-state', championState)
+    await listening()
+    emit('presentation-state', update(championState, 1))
     await act(() => new Promise(resolve => setTimeout(resolve, 2000)))
     expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'playing')
     await vi.waitFor(() => expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'done'), { timeout: 6000 })
     expect(screen.getByText('Campeão')).toBeVisible()
   }, 10000)
 
-  it('shows a state received on mount without replaying its reveal', async () => {
-    tauri.invoke.mockResolvedValue(snapshot(resultState))
+  it('shows an update read on mount without replaying its reveal', async () => {
+    tauri.invoke.mockResolvedValue(snapshot(update(resultState, 3)))
     render(<PresentationApp />)
     await screen.findByText('Rui')
     expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'done')
   })
+})
 
+describe('sound', () => {
   it('starts with sound, mutes from the TV and follows the operator', async () => {
     const user = userEvent.setup()
     tauri.invoke.mockImplementation(async command => command === 'get_presentation_state' ? snapshot(null) : null)
@@ -174,7 +226,7 @@ describe('live updates', () => {
     expect(tauri.invoke).toHaveBeenCalledWith('set_presentation_muted', { muted: true })
     expect(screen.getByRole('button', { name: 'Ativar som' })).toBeVisible()
 
-    await vi.waitFor(() => expect(tauri.handlers.has('presentation-muted')).toBe(true))
+    await listening()
     emit('presentation-muted', false)
     expect(screen.getByRole('button', { name: 'Silenciar' })).toBeVisible()
   })
@@ -183,5 +235,54 @@ describe('live updates', () => {
     tauri.invoke.mockResolvedValue(snapshot(null, true))
     render(<PresentationApp />)
     expect(await screen.findByRole('button', { name: 'Ativar som' })).toBeVisible()
+  })
+
+  it('never chimes before the stored sound setting is known', async () => {
+    const audio = fakeAudioContext('running')
+    vi.stubGlobal('AudioContext', audio.FakeContext)
+    let answer!: (value: PresentationSnapshot) => void
+    tauri.invoke.mockImplementation(() => new Promise(resolve => { answer = resolve }))
+    render(<PresentationApp />)
+    await vi.waitFor(() => expect(tauri.invoke).toHaveBeenCalledWith('get_presentation_state'))
+    emit('presentation-state', update(resultState, 1))
+    await act(async () => answer(snapshot(null, true)))
+    expect(audio.contexts.flatMap(context => context.oscillators)).toHaveLength(0)
+  })
+
+  it('chimes for a revealed update once the setting is known', async () => {
+    const audio = fakeAudioContext('running')
+    vi.stubGlobal('AudioContext', audio.FakeContext)
+    tauri.invoke.mockResolvedValue(snapshot(null))
+    render(<PresentationApp />)
+    await listening()
+    await act(async () => {})
+    emit('presentation-state', update(resultState, 1))
+    await vi.waitFor(() => expect(audio.contexts.flatMap(context => context.oscillators)).toHaveLength(3))
+    emit('presentation-state', { ...update({ kind: 'idle', tournamentName: 'Taça', payload: null }, 2), reveal: false })
+    await act(async () => {})
+    expect(audio.contexts.flatMap(context => context.oscillators)).toHaveLength(3)
+  })
+
+  it('asks for a click while the webview holds sound back, until it is allowed', async () => {
+    const audio = fakeAudioContext('suspended')
+    vi.stubGlobal('AudioContext', audio.FakeContext)
+    tauri.invoke.mockResolvedValue(snapshot(null))
+    render(<PresentationApp />)
+    expect(await screen.findByText('Clique no ecrã para ativar o som')).toBeVisible()
+
+    audio.gate.allowed = true
+    await act(async () => {
+      fireEvent.pointerDown(screen.getByRole('main'))
+    })
+    await vi.waitFor(() => expect(screen.queryByText('Clique no ecrã para ativar o som')).not.toBeInTheDocument())
+  })
+
+  it('hides the click prompt while muted', async () => {
+    const audio = fakeAudioContext('suspended')
+    vi.stubGlobal('AudioContext', audio.FakeContext)
+    tauri.invoke.mockResolvedValue(snapshot(null, true))
+    render(<PresentationApp />)
+    expect(await screen.findByRole('button', { name: 'Ativar som' })).toBeVisible()
+    expect(screen.queryByText('Clique no ecrã para ativar o som')).not.toBeInTheDocument()
   })
 })

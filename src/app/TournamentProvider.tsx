@@ -5,7 +5,7 @@ import {
   type TieScope, type TournamentState,
 } from '../domain/tournament'
 import { createTauriPresentationController } from '../platform/presentation'
-import type { PresentationPort, SessionEvent } from '../platform/presentationPort'
+import type { PresentationPort, PresentationSignal, SessionEvent } from '../platform/presentationPort'
 import { createTauriTournamentRepository, type TournamentRepository } from '../platform/tournamentRepository'
 import { backupFileName, claimUniqueId, tournamentIdFor } from './slugs'
 import { storageErrorCode, storageErrorMessage } from './storageMessages'
@@ -78,7 +78,8 @@ export function TournamentProvider(props: TournamentProviderProps) {
     let commits = 0
     /** Stored ids plus every id handed out in this session. */
     const takenIds = new Set<string>()
-    /** Set by the first successful open: before that, a TV that cannot take updates is not news. */
+    /** Set while the TV window is open (from a successful open until it closes): otherwise a TV that
+     * cannot take updates is not news, since the app stores every update for the next window. */
     let presentationOpened = false
     let muted = false
 
@@ -100,6 +101,11 @@ export function TournamentProvider(props: TournamentProviderProps) {
       } catch (error) {
         warnPresentation(error)
       }
+    }
+
+    function followMuted(next: boolean) {
+      muted = next
+      setPresentationMuted(next)
     }
 
     function clearSetup() {
@@ -131,6 +137,9 @@ export function TournamentProvider(props: TournamentProviderProps) {
         if (commits === commitsAtStart) {
           current = snapshot?.state ?? null
           setState(current)
+          // A reopened TV then shows the resumed tournament at once, without a reveal or sound.
+          const resumed = current
+          if (resumed) tellPresentation(presentation => presentation.seed?.(resumed))
         }
         setLoadError(null)
       } catch (error) {
@@ -184,15 +193,23 @@ export function TournamentProvider(props: TournamentProviderProps) {
       },
       async openPresentation() {
         try {
-          await deps.current.presentation.open()
+          const { presentation } = deps.current
+          await presentation.open()
           presentationOpened = true
           setPresentationOpen(true)
+          // The TV may have changed the sound before it was closed; show the stored setting.
+          presentation.readMuted?.().then(followMuted).catch(() => {})
         } catch (error) {
           // A missing or closed display never stops the tournament; only the known message is shown as is.
           const unavailable = error instanceof Error && error.message === PRESENTATION_UNAVAILABLE
           if (!unavailable) console.error('[presentation]', error)
           setNotice({ tone: 'warning', text: unavailable ? PRESENTATION_UNAVAILABLE : PRESENTATION_FAILED })
         }
+      },
+      onPresentationSignal(signal: PresentationSignal) {
+        if (signal.type === 'muted') return followMuted(signal.muted)
+        presentationOpened = false
+        setPresentationOpen(false)
       },
       skipPresentation() {
         tellPresentation(presentation => presentation.skip?.())
@@ -227,6 +244,9 @@ export function TournamentProvider(props: TournamentProviderProps) {
       },
     }
   })
+
+  // The TV tells the operator about its own mute button and about being closed.
+  useEffect(() => deps.current.presentation.subscribe?.(actions.onPresentationSignal), [actions])
 
   // Load once, even when StrictMode runs effects twice.
   const started = useRef(false)

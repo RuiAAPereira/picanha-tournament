@@ -18,7 +18,7 @@ const tauri = vi.hoisted(() => {
   return { handlers: new Map<string, (event: { payload: unknown }) => void>() }
 })
 
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => ({ state: null, muted: false })) }))
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => ({ update: null, muted: false })) }))
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (event: string, handler: (event: { payload: unknown }) => void) => {
     tauri.handlers.set(event, handler)
@@ -35,7 +35,7 @@ const resultState: PresentationState = {
 it('shows a new state at once, without a reveal, when reduced motion is preferred', async () => {
   render(<PresentationApp />)
   await vi.waitFor(() => expect(tauri.handlers.has('presentation-state')).toBe(true))
-  act(() => tauri.handlers.get('presentation-state')!({ payload: resultState }))
+  act(() => tauri.handlers.get('presentation-state')!({ payload: { seq: 1, reveal: true, state: resultState } }))
   expect(screen.getByTestId('reveal')).toHaveAttribute('data-reveal', 'done')
   expect(screen.getByText('Rui')).toBeVisible()
   expect(screen.getByText(/2 bolas/)).toBeVisible()

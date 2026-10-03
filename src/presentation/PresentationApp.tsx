@@ -32,7 +32,7 @@ function Content({ state }: { state: PresentationState | null }) {
 /** How many items each screen reveals in turn; mirrors the `revealItem` children of each component. */
 function revealItems(state: PresentationState | null): number {
   switch (state?.kind) {
-    case 'draw': return 1 + state.payload.groups.length + (state.payload.preliminaryMatches.length > 0 ? 1 : 0)
+    case 'draw': return 1 + state.payload.groups.length + state.payload.preliminaryMatches.length
     case 'result': return state.payload.corrected ? 6 : 5
     case 'champion': return 3
     default: return 2
@@ -48,10 +48,26 @@ export default function PresentationApp({ initialState }: { initialState?: Prese
   const reducedMotion = useReducedMotion() ?? false
   const [sound] = useState(createRevealSound)
 
-  useEffect(() => () => sound.close(), [sound])
-  useEffect(() => sound.setMuted(feed.muted), [sound, feed.muted])
+  const [needsGesture, setNeedsGesture] = useState(false)
+
   useEffect(() => {
-    if (feed.revealKey > 0) sound.play()
+    const stop = sound.subscribe(() => setNeedsGesture(sound.needsGesture()))
+    sound.prepare()
+    // The webview may hold sound back until someone interacts with the TV window.
+    const unlock = () => void sound.unlock()
+    window.addEventListener('pointerdown', unlock)
+    window.addEventListener('keydown', unlock)
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+      stop()
+      sound.close()
+    }
+  }, [sound])
+  // Silent until the stored setting is known, so a live state never chimes on a muted TV.
+  useEffect(() => sound.setMuted(feed.muted || !feed.muteKnown), [sound, feed.muted, feed.muteKnown])
+  useEffect(() => {
+    if (feed.revealKey > 0) void sound.play()
   }, [sound, feed.revealKey])
 
   const showsTournament = feed.state && feed.state.kind !== 'idle'
@@ -66,9 +82,12 @@ export default function PresentationApp({ initialState }: { initialState?: Prese
       >
         <Content state={feed.state} />
       </Reveal>
-      <button type="button" className="mute" onClick={() => feed.setMuted(!feed.muted)}>
-        {feed.muted ? 'Ativar som' : 'Silenciar'}
-      </button>
+      <div className="sound">
+        {needsGesture && !feed.muted && <p className="sound-hint">Clique no ecrã para ativar o som</p>}
+        <button type="button" className="mute" onClick={() => feed.setMuted(!feed.muted)}>
+          {feed.muted ? 'Ativar som' : 'Silenciar'}
+        </button>
+      </div>
     </main>
   )
 }

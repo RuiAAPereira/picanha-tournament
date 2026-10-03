@@ -3,18 +3,25 @@ import type { ReactNode } from 'react'
 
 const LEAD_SECONDS = 0.2
 const ITEM_SECONDS = 0.7
-/** Every reveal of two items or more lasts about this long, however many items it has. */
+/** Every reveal lasts this long, however many items it has. */
 export const REVEAL_SECONDS = 3
 
-/** Seconds between two items appearing, so that `items` items fill `REVEAL_SECONDS` (at most one second apart). */
-export const staggerFor = (items: number) =>
-  Math.min(1, (REVEAL_SECONDS - LEAD_SECONDS - ITEM_SECONDS) / Math.max(items - 1, 1))
+/**
+ * When the first item starts and how far apart the next ones follow, so the last one settles at
+ * `REVEAL_SECONDS`. A lone item waits longer before it appears.
+ */
+export function revealTiming(items: number) {
+  const gaps = Math.max(items, 1) - 1
+  const stagger = gaps === 0 ? 0 : (REVEAL_SECONDS - LEAD_SECONDS - ITEM_SECONDS) / gaps
+  const lead = REVEAL_SECONDS - ITEM_SECONDS - stagger * gaps
+  return { lead, stagger, total: lead + stagger * gaps + ITEM_SECONDS }
+}
 
 /** Children appear one after another. */
-const container = (items: number): Variants => ({
-  hidden: {},
-  shown: { transition: { staggerChildren: staggerFor(items), delayChildren: LEAD_SECONDS } },
-})
+const container = (items: number): Variants => {
+  const { lead, stagger } = revealTiming(items)
+  return { hidden: {}, shown: { transition: { staggerChildren: stagger, delayChildren: lead } } }
+}
 
 /** Give to each `motion.*` child that should appear in turn. */
 export const revealItem: Variants = {

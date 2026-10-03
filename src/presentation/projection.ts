@@ -1,20 +1,33 @@
-import {
-  championId, groupEntrants, matchSides, playerName, preliminaryName, roundName,
-} from '../app/labels'
+import { championId, matchSides, playerName, preliminaryName, roundName } from '../app/labels'
 import { findMatch, isKnockoutMatch, type TournamentState } from '../domain/tournament'
 import type { PlayerId } from '../domain/types'
 import type { SessionEvent } from '../platform/presentationPort'
-import type { PresentationState } from './presentationState'
+import type { DrawEntrant, PresentationState } from './presentationState'
 
 const idle = (state: TournamentState): PresentationState =>
   ({ kind: 'idle', tournamentName: state.name, payload: null })
+
+/** A group's entrants as drawn; an undecided preliminary winner is shortened for the TV, e.g. `Vencedor PE 3`. */
+function drawEntrants(state: TournamentState, groupId: string): DrawEntrant[] {
+  const drawn = state.draw.groups.find(group => group.id === groupId)
+  if (!drawn) return []
+  return [
+    ...drawn.playerIds.map(id => ({ name: playerName(state, id) })),
+    ...drawn.preliminaryWinnerMatchIds.map(matchId => {
+      const index = state.preliminaryMatches.findIndex(match => match.id === matchId)
+      const winnerId = state.preliminaryMatches[index]?.result?.winnerId
+      if (winnerId) return { name: playerName(state, winnerId) }
+      return { name: `Vencedor PE ${index + 1}`, description: `Vencedor da ${preliminaryName(state, matchId)}` }
+    }),
+  ]
+}
 
 function projectDraw(state: TournamentState): PresentationState {
   return {
     kind: 'draw',
     tournamentName: state.name,
     payload: {
-      groups: state.draw.groups.map(group => ({ id: group.id, entrants: groupEntrants(state, group.id) })),
+      groups: state.draw.groups.map(group => ({ id: group.id, entrants: drawEntrants(state, group.id) })),
       preliminaryMatches: state.preliminaryMatches.map(match => ({
         label: preliminaryName(state, match.id),
         sides: matchSides(state, match),
@@ -54,6 +67,12 @@ function projectResult(state: TournamentState, event: SessionEvent): Presentatio
       corrected: event.type === 'correction',
     },
   }
+}
+
+/** What the TV shows between changes, e.g. after the operator resumes a saved tournament: the champion or the name. */
+export function projectResting(state: TournamentState): PresentationState {
+  const champion = championId(state)
+  return champion ? projectChampion(state, champion) : idle(state)
 }
 
 /** What the TV shows after a confirmed change: names and labels only, never the whole tournament. */

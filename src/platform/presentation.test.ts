@@ -1,66 +1,126 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fourPlayerState } from '../app/testSupport'
+import { fourPlayerState, playGroups } from '../app/testSupport'
+import { applyMatchResult } from '../domain/tournament'
 import type { PresentationState } from '../presentation/presentationState'
 import { projectPresentation } from '../presentation/projection'
-import { createTauriPresentationController, fetchPresentationSnapshot, GENERIC_PRESENTATION_ERROR_MESSAGE } from './presentation'
+import {
+  createTauriPresentationController, fetchPresentationSnapshot, GENERIC_PRESENTATION_ERROR_MESSAGE, type ListenFn,
+} from './presentation'
 
 const idle: PresentationState = { kind: 'idle', tournamentName: 'Torneio', payload: null }
+const champion: PresentationState = { kind: 'champion', tournamentName: 'Torneio', payload: { champion: 'Ana', runnerUp: 'Rui' } }
 const closed = { code: 'window_closed', message: 'A janela da apresentação está fechada.' }
+
+type Invoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
+const noListen: ListenFn = async () => () => {}
+const controllerWith = (invoke: Invoke, clock = () => 100) => createTauriPresentationController(invoke, noListen, clock)
+const fakeInvoke = () => vi.fn<Invoke>(async () => null)
+const updates = (invoke: ReturnType<typeof fakeInvoke>) =>
+  invoke.mock.calls.filter(([command]) => command === 'publish_presentation_state').map(([, args]) => args!.update)
 
 describe('createTauriPresentationController', () => {
   it('opens the presentation window', async () => {
-    const invoke = vi.fn(async () => null)
-    const controller = createTauriPresentationController(invoke)
-    await controller.open()
+    const invoke = fakeInvoke()
+    await controllerWith(invoke).open()
     expect(invoke).toHaveBeenCalledWith('open_presentation_window')
   })
 
-  it('publishes a presentation state as is', async () => {
-    const invoke = vi.fn(async () => null)
-    await createTauriPresentationController(invoke).publish(idle)
-    expect(invoke).toHaveBeenCalledWith('publish_presentation_state', { state: idle })
+  it('publishes a TV state with a reveal, and idle states without one', async () => {
+    const invoke = fakeInvoke()
+    const controller = controllerWith(invoke)
+    await controller.publishPresentation(champion)
+    await controller.publishPresentation(idle)
+    await controller.publishPresentation(champion, { reveal: false })
+    expect(updates(invoke)).toEqual([
+      { seq: 100, reveal: true, state: champion },
+      { seq: 101, reveal: false, state: idle },
+      { seq: 102, reveal: false, state: champion },
+    ])
+  })
+
+  it('numbers publishes from the clock, always increasing', async () => {
+    const invoke = fakeInvoke()
+    const times = [500, 400, 900]
+    const controller = controllerWith(invoke, () => times.shift()!)
+    for (let index = 0; index < 3; index++) await controller.publishPresentation(champion)
+    expect(updates(invoke).map(update => (update as { seq: number }).seq)).toEqual([500, 501, 900])
   })
 
   it('projects a tournament state and its event before publishing', async () => {
-    const invoke = vi.fn(async () => null)
+    const invoke = fakeInvoke()
     const state = fourPlayerState()
-    await createTauriPresentationController(invoke).publish(state, { type: 'draw' })
-    expect(invoke).toHaveBeenCalledWith('publish_presentation_state', { state: projectPresentation(state, { type: 'draw' }) })
+    await controllerWith(invoke).publish(state, { type: 'draw' })
+    expect(updates(invoke)).toEqual([{ seq: 100, reveal: true, state: projectPresentation(state, { type: 'draw' }) }])
   })
 
-  it('skips the reveal and sets the sound', async () => {
-    const invoke = vi.fn(async () => null)
-    const controller = createTauriPresentationController(invoke)
+  it('seeds a resumed tournament without a reveal, as its champion when the final is decided', async () => {
+    const invoke = fakeInvoke()
+    const controller = controllerWith(invoke)
+    const groupsDone = playGroups(fourPlayerState(), ['ana', 'bruno', 'carla', 'duarte'])
+    const finished = applyMatchResult(groupsDone, {
+      matchId: groupsDone.bracket.rounds.at(-1)!.matches[0].id, winnerId: 'ana', loserBallsRemaining: 0, at: 'x',
+    })
+    await controller.seed(fourPlayerState())
+    await controller.seed(finished)
+    expect(updates(invoke)).toEqual([
+      { seq: 100, reveal: false, state: idle },
+      { seq: 101, reveal: false, state: { kind: 'champion', tournamentName: 'Torneio', payload: { champion: 'Ana', runnerUp: 'Bruno' } } },
+    ])
+  })
+
+  it('skips the reveal, sets and reads the sound', async () => {
+    const invoke = vi.fn<Invoke>(async command => command === 'get_presentation_state' ? { update: null, muted: true } : null)
+    const controller = controllerWith(invoke)
     await controller.skip()
     await controller.setMuted(true)
+    expect(await controller.readMuted()).toBe(true)
     expect(invoke).toHaveBeenNthCalledWith(1, 'skip_presentation')
     expect(invoke).toHaveBeenNthCalledWith(2, 'set_presentation_muted', { muted: true })
   })
 
+  it('passes the sound and closing of the TV on to the operator', async () => {
+    const handlers = new Map<string, (message: { payload: unknown }) => void>()
+    const unlisten = vi.fn()
+    const listen: ListenFn = async (event, handler) => {
+      handlers.set(event, handler)
+      return unlisten
+    }
+    const controller = createTauriPresentationController(fakeInvoke(), listen)
+    const listener = vi.fn()
+    const stop = controller.subscribe(listener)
+    await vi.waitFor(() => expect(handlers.size).toBe(2))
+    handlers.get('presentation-muted')!({ payload: true })
+    handlers.get('presentation-closed')!({ payload: null })
+    expect(listener.mock.calls).toEqual([[{ type: 'muted', muted: true }], [{ type: 'closed' }]])
+    stop()
+    await vi.waitFor(() => expect(unlisten).toHaveBeenCalledTimes(2))
+  })
+
   it('passes presentation errors through and asks for a new window on the next open', async () => {
-    const invoke = vi.fn(async (command: string) => {
+    const invoke = vi.fn<Invoke>(async command => {
       if (command === 'publish_presentation_state') throw closed
       return null
     })
-    const controller = createTauriPresentationController(invoke)
+    const controller = controllerWith(invoke)
     await controller.open()
-    await expect(controller.publish(idle)).rejects.toEqual(closed)
+    await expect(controller.publishPresentation(idle)).rejects.toEqual(closed)
     await controller.open()
     expect(invoke.mock.calls.filter(([command]) => command === 'open_presentation_window')).toHaveLength(2)
   })
 
   it('turns unknown failures into a generic Portuguese error', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const controller = createTauriPresentationController(vi.fn(async () => { throw new Error('ipc down') }))
+    const controller = controllerWith(vi.fn<Invoke>(async () => { throw new Error('ipc down') }))
     await expect(controller.open()).rejects.toEqual({ code: 'unexpected', message: GENERIC_PRESENTATION_ERROR_MESSAGE })
     log.mockRestore()
   })
 })
 
 describe('fetchPresentationSnapshot', () => {
-  it('reads the last published state and sound setting', async () => {
-    const invoke = vi.fn(async () => ({ state: idle, muted: true }))
-    expect(await fetchPresentationSnapshot(invoke)).toEqual({ state: idle, muted: true })
+  it('reads the newest update and sound setting', async () => {
+    const snapshot = { update: { seq: 1, reveal: true, state: idle }, muted: true }
+    const invoke = vi.fn<Invoke>(async () => snapshot)
+    expect(await fetchPresentationSnapshot(invoke)).toEqual(snapshot)
     expect(invoke).toHaveBeenCalledWith('get_presentation_state')
   })
 })

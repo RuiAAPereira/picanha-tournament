@@ -1,6 +1,7 @@
 import { act, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTauriPresentationController } from '../platform/presentation'
+import type { PresentationSignal } from '../platform/presentationPort'
 import { fakeRepository, fourPlayerState, renderOperator, renderSession, snapshotOf } from './testSupport'
 import type { TournamentSession } from './useTournamentSession'
 
@@ -11,12 +12,24 @@ afterEach(() => {
 const OUT_OF_DATE = 'A apresentação não recebeu a última atualização. O torneio continua.'
 const closed = { code: 'window_closed', message: 'A janela da apresentação está fechada.' }
 
-const fakePresentation = () => ({
-  open: vi.fn(async () => {}),
-  publish: vi.fn(async () => {}),
-  skip: vi.fn(async () => {}),
-  setMuted: vi.fn(async (_muted: boolean) => {}),
-})
+function fakePresentation() {
+  const signals: { listener: ((signal: PresentationSignal) => void) | null } = { listener: null }
+  return {
+    signals,
+    open: vi.fn(async () => {}),
+    publish: vi.fn(async () => {}),
+    seed: vi.fn(async (_state: unknown) => {}),
+    skip: vi.fn(async () => {}),
+    setMuted: vi.fn(async (_muted: boolean) => {}),
+    readMuted: vi.fn(async () => false),
+    subscribe: vi.fn((listener: (signal: PresentationSignal) => void) => {
+      signals.listener = listener
+      return () => {
+        signals.listener = null
+      }
+    }),
+  }
+}
 
 async function ready(session: { current: TournamentSession | null }) {
   await vi.waitFor(() => expect(session.current?.loading).toBe(false))
@@ -100,5 +113,58 @@ describe('closed presentation window', () => {
     await act(async () => {})
     expect(session.current!.notice).toBeNull()
     log.mockRestore()
+  })
+})
+
+describe('TV window lifecycle', () => {
+  it('shows the stored sound setting after opening and follows the TV mute button', async () => {
+    const presentation = fakePresentation()
+    presentation.readMuted.mockResolvedValue(true)
+    const { user } = renderOperator('#/operator', { presentation })
+    await user.click(await screen.findByRole('button', { name: 'Apresentar' }))
+    expect(await screen.findByRole('button', { name: 'Ativar som' })).toBeVisible()
+
+    act(() => presentation.signals.listener!({ type: 'muted', muted: false }))
+    expect(screen.getByRole('button', { name: 'Silenciar' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Silenciar' }))
+    expect(presentation.setMuted).toHaveBeenLastCalledWith(true)
+  })
+
+  it('hides the TV controls once the TV window closes, stays quiet about updates and reopens it', async () => {
+    const presentation = { ...fakePresentation(), publish: vi.fn(() => Promise.reject(closed)) }
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const session = renderSession(fakeRepository(), fourPlayerState(), { presentation })
+    await ready(session)
+    await act(() => session.current!.openPresentation())
+    expect(session.current!.presentationOpen).toBe(true)
+
+    act(() => presentation.signals.listener!({ type: 'closed' }))
+    expect(session.current!.presentationOpen).toBe(false)
+    act(() => session.current!.recordResult(firstResult(session.current!)))
+    await vi.waitFor(() => expect(presentation.publish).toHaveBeenCalled())
+    await act(async () => {})
+    expect(session.current!.notice).toBeNull()
+
+    await act(() => session.current!.openPresentation())
+    expect(presentation.open).toHaveBeenCalledTimes(2)
+    expect(session.current!.presentationOpen).toBe(true)
+    log.mockRestore()
+  })
+
+  it('seeds the TV with a resumed tournament, without a reveal', async () => {
+    const presentation = fakePresentation()
+    const state = fourPlayerState()
+    const session = renderSession(fakeRepository(), state, { presentation })
+    await ready(session)
+    expect(presentation.seed).toHaveBeenCalledTimes(1)
+    expect(presentation.seed).toHaveBeenCalledWith(state)
+    expect(presentation.publish).not.toHaveBeenCalled()
+  })
+
+  it('seeds nothing when there is no saved tournament', async () => {
+    const presentation = fakePresentation()
+    const session = renderSession(fakeRepository(), null, { presentation })
+    await ready(session)
+    expect(presentation.seed).not.toHaveBeenCalled()
   })
 })

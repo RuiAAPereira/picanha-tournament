@@ -1,7 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "presentation",
-  "description": "The read-only TV window: it only listens to the events the app sends it.",
+  "description": "The read-only TV window: it reads the last state, sets its own sound and listens to the app's events.",
   "windows": ["presentation"],
-  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+  "permissions": [
+    "allow-get-presentation-state",
+    "allow-set-presentation-muted",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
 }

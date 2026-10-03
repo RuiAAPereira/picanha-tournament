@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { fourPlayerState, NOW, playGroups } from '../app/testSupport'
 import { drawGroups, proposeFormats, type ReadyProposal } from '../domain/formats'
 import { applyMatchResult, correctMatchResult, createTournamentState, type TournamentState } from '../domain/tournament'
-import { projectPresentation } from './projection'
+import { projectPresentation, projectResting } from './projection'
 
 const ORDER = ['ana', 'bruno', 'carla', 'duarte']
 
@@ -28,8 +28,8 @@ describe('projectPresentation', () => {
     expect(projected.tournamentName).toBe('Taça')
     if (projected.kind !== 'draw') return
     const entrants = projected.payload.groups.flatMap(group => group.entrants)
-    expect(entrants).toContain('Vencedor da Pré-eliminatória 1')
-    expect(entrants.every(name => !/^[a-z]+$/.test(name))).toBe(true)
+    expect(entrants).toContainEqual({ name: 'Vencedor PE 1', description: 'Vencedor da Pré-eliminatória 1' })
+    expect(entrants.every(entrant => !/^[a-z]+$/.test(entrant.name))).toBe(true)
     expect(projected.payload.preliminaryMatches).toHaveLength(1)
     expect(projected.payload.preliminaryMatches[0].label).toBe('Pré-eliminatória 1')
     expect(projected.payload.preliminaryMatches[0].sides.every(name => /^[A-Z]/.test(name))).toBe(true)
@@ -105,5 +105,14 @@ describe('projectPresentation', () => {
     expect(projectPresentation(state, { type: 'demo' })).toEqual(idle)
     expect(projectPresentation(state, { type: 'result', matchId: 'nenhum' })).toEqual(idle)
     expect(projectPresentation(state, { type: 'result', matchId: state.groups[0].matches[0].id })).toEqual(idle)
+  })
+
+  it('rests on the tournament name, or on the champion once the final is decided', () => {
+    const state = fourPlayerState()
+    expect(projectResting(state)).toEqual({ kind: 'idle', tournamentName: 'Torneio', payload: null })
+    const groupsDone = playGroups(state, ORDER)
+    const final = groupsDone.bracket.rounds.at(-1)!.matches[0]
+    expect(projectResting(play(groupsDone, final.id, 'ana', 0)))
+      .toEqual({ kind: 'champion', tournamentName: 'Torneio', payload: { champion: 'Ana', runnerUp: 'Bruno' } })
   })
 })
