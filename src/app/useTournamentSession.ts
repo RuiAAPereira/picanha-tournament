@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 import type { ReadyProposal } from '../domain/formats'
 import type { MatchId } from '../domain/types'
 import type { ResultInput, TieScope, TournamentPlayer, TournamentState } from '../domain/tournament'
+import type { PresentationDisplay } from '../platform/presentationPort'
 
 /** What the operator enters; the session stamps it with `at`. */
 export type ResultEntry = Omit<ResultInput, 'at' | 'kind'> & { kind: 'played' | 'withdrawal' }
@@ -27,8 +28,10 @@ export type TournamentSession = {
   storageAvailable: boolean
   notice: Notice | null
   canLoadDemo: boolean
-  /** The TV window opened at least once in this session; its private controls are shown from then on. */
+  /** The TV window is open; its private controls are shown until it closes. */
   presentationOpen: boolean
+  /** Where the open TV window was put: a display id, `WINDOWED_DISPLAY`, or `null` when the app chose. */
+  presentationDisplay: string | null
   presentationMuted: boolean
   createTournament(setup: TournamentSetup): void
   /** Draws the pending setup, creates the tournament and saves it. */
@@ -39,7 +42,12 @@ export type TournamentSession = {
   correctResult(entry: ResultEntry, confirmed?: boolean): CorrectionOutcome
   resolveTie(scope: TieScope): void
   loadDemo(): void
-  openPresentation(): Promise<void>
+  /** Opens the TV window on `display`, or moves it there when open; a failure only warns. */
+  openPresentation(display?: string): Promise<void>
+  /** Closes the TV window; `presentationOpen` turns false once it reports it is gone. */
+  closePresentation(): Promise<void>
+  /** The connected displays; none outside the app or when they cannot be read. */
+  listPresentationDisplays(): Promise<PresentationDisplay[]>
   /** Completes the reveal running on the TV at once. */
   skipPresentation(): void
   togglePresentationMuted(): void

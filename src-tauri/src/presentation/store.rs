@@ -11,6 +11,7 @@ use serde_json::Value;
 pub enum PresentationErrorCode {
     WindowClosed,
     WindowFailed,
+    DisplayMissing,
     Unexpected,
 }
 
@@ -19,6 +20,7 @@ impl PresentationErrorCode {
         match self {
             Self::WindowClosed => "A janela da apresentação está fechada.",
             Self::WindowFailed => "Não foi possível abrir a janela da apresentação.",
+            Self::DisplayMissing => "O ecrã escolhido já não está ligado. Escolha outro.",
             Self::Unexpected => "Ocorreu um erro inesperado na apresentação.",
         }
     }
@@ -68,6 +70,8 @@ pub struct PresentationStore {
     snapshot: Mutex<PresentationSnapshot>,
     /// Held while the window is looked up and built, so two quick opens never race on the label.
     pub opening: Mutex<()>,
+    /// Where the last successful open put the TV window: a display id or `WINDOWED`.
+    remembered: Mutex<Option<String>>,
 }
 
 impl PresentationStore {
@@ -91,6 +95,18 @@ impl PresentationStore {
 
     pub fn snapshot(&self) -> PresentationSnapshot {
         self.lock().clone()
+    }
+
+    fn lock_remembered(&self) -> MutexGuard<'_, Option<String>> {
+        self.remembered.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn remember_display(&self, id: &str) {
+        *self.lock_remembered() = Some(id.to_string());
+    }
+
+    pub fn remembered_display(&self) -> Option<String> {
+        self.lock_remembered().clone()
     }
 }
 
@@ -157,7 +173,21 @@ mod tests {
         );
         let failed = serde_json::to_value(PresentationError::from(PresentationErrorCode::WindowFailed)).unwrap();
         assert_eq!(failed["code"], "window_failed");
+        let missing = serde_json::to_value(PresentationError::from(PresentationErrorCode::DisplayMissing)).unwrap();
+        assert_eq!(
+            missing,
+            json!({ "code": "display_missing", "message": "O ecrã escolhido já não está ligado. Escolha outro." })
+        );
         let unexpected = serde_json::to_value(PresentationError::from(PresentationErrorCode::Unexpected)).unwrap();
         assert_eq!(unexpected["code"], "unexpected");
+    }
+
+    #[test]
+    fn store_remembers_the_last_display() {
+        let store = PresentationStore::default();
+        assert_eq!(store.remembered_display(), None);
+        store.remember_display("tv");
+        store.remember_display("window");
+        assert_eq!(store.remembered_display().as_deref(), Some("window"));
     }
 }

@@ -1,12 +1,15 @@
 //! The TV presentation window: its lifecycle, and the events sent to it and back to the operator.
 
+mod displays;
+mod placement;
 mod store;
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, Monitor, Runtime, State, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, Runtime, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
+
+use displays::{choose_target, PresentationDisplay, Target};
 
 pub use store::{
     PresentationError, PresentationErrorCode, PresentationSnapshot, PresentationStore,
@@ -50,65 +53,76 @@ fn emit_to_presentation<R: Runtime, S: Serialize + Clone>(
     })
 }
 
-/// The first monitor that is not the primary one, when more than one is connected.
-fn secondary_monitor<R: Runtime>(app: &AppHandle<R>) -> Option<Monitor> {
-    let monitors = app.available_monitors().ok()?;
-    if monitors.len() < 2 {
-        return None;
-    }
-    let primary = app.primary_monitor().ok().flatten();
-    monitors.into_iter().find(|monitor| {
-        primary.as_ref().is_none_or(|primary| {
-            primary.position() != monitor.position() || primary.name() != monitor.name()
-        })
-    })
+fn build_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<WebviewWindow<R>> {
+    let (width, height) = placement::WINDOW_SIZE;
+    WebviewWindowBuilder::new(app, PRESENTATION_LABEL, WebviewUrl::App(PRESENTATION_URL.into()))
+        .title(PRESENTATION_TITLE)
+        .inner_size(width, height)
+        // Hidden until it sits where it belongs, so it never flashes on the operator screen.
+        .visible(false)
+        .build()
 }
 
-/// Moves the hidden window onto the TV, shows it, then makes it fullscreen there.
-fn place_on<R: Runtime>(window: &WebviewWindow<R>, monitor: &Monitor) -> tauri::Result<()> {
-    window.set_position(*monitor.position())?;
-    window.show()?;
-    window.set_fullscreen(true)
+/// The connected displays, by number, for the operator to choose where the TV window goes.
+#[tauri::command]
+pub fn list_presentation_displays<R: Runtime>(app: AppHandle<R>) -> Vec<PresentationDisplay> {
+    placement::connected(&app).into_iter().map(|(display, _)| display).collect()
 }
 
-fn build_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let builder = WebviewWindowBuilder::new(
-        app,
-        PRESENTATION_LABEL,
-        WebviewUrl::App(PRESENTATION_URL.into()),
-    )
-    .title(PRESENTATION_TITLE);
-
-    let Some(monitor) = secondary_monitor(app) else {
-        builder.inner_size(1280.0, 720.0).resizable(true).build()?;
-        return Ok(());
-    };
-    // Hidden until it sits on the TV, so it never flashes on the operator screen.
-    let window = builder.visible(false).build()?;
-    place_on(&window, &monitor).inspect_err(|_| {
-        // A half-placed window would hold the label; the next open starts clean.
-        let _ = window.destroy();
-    })
-}
-
-/// Shows and focuses the presentation window, or creates it (again, after it was closed).
-/// The window reads the latest update itself through `get_presentation_state` once it listens.
+/// Puts the presentation window on `display` (or in a normal window for `WINDOWED`), creating it
+/// when needed and moving it when it is already open. Without `display`, the one last chosen in this
+/// session, else the first secondary display, else a normal window. The window reads the latest
+/// update itself through `get_presentation_state` once it listens.
 #[tauri::command(async)]
 pub fn open_presentation_window<R: Runtime>(
     app: AppHandle<R>,
     store: State<'_, PresentationStore>,
+    display: Option<String>,
 ) -> Result<(), PresentationError> {
     let _opening = store.opening.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let failed =
         |error: tauri::Error| PresentationError::logged(PresentationErrorCode::WindowFailed, error);
-    if let Some(window) = presentation_window(&app) {
-        return window
-            .unminimize()
-            .and_then(|_| window.show())
-            .and_then(|_| window.set_focus())
-            .map_err(failed);
+    let connected = placement::connected(&app);
+    let displays: Vec<_> = connected.iter().map(|(display, _)| display.clone()).collect();
+    let target = choose_target(display.as_deref(), store.remembered_display().as_deref(), &displays)?;
+    let monitor = match &target {
+        Target::Display(id) => connected.iter().find(|(display, _)| &display.id == id).map(|(_, monitor)| monitor),
+        Target::Windowed => None,
+    };
+
+    let existing = presentation_window(&app);
+    let fresh = existing.is_none();
+    let window = match existing {
+        Some(window) => window,
+        None => build_window(&app).map_err(failed)?,
+    };
+    let placed = match monitor {
+        Some(monitor) => placement::fullscreen_on(&window, monitor),
+        None => placement::windowed(&app, &window).map_err(failed),
+    };
+    if placed.is_err() && fresh {
+        // A half-placed window would hold the label; the next open starts clean.
+        let _ = window.destroy();
     }
-    build_window(&app).map_err(failed)
+    placed?;
+    store.remember_display(target.id());
+    Ok(())
+}
+
+/// Closes the presentation window, if there is one; the operator hears of it through `CLOSED_EVENT`.
+/// Waits for an open in progress, so it never closes a window still being placed.
+#[tauri::command(async)]
+pub fn close_presentation_window<R: Runtime>(
+    app: AppHandle<R>,
+    store: State<'_, PresentationStore>,
+) -> Result<(), PresentationError> {
+    let _opening = store.opening.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    match presentation_window(&app) {
+        Some(window) => window
+            .destroy()
+            .map_err(|error| PresentationError::logged(PresentationErrorCode::Unexpected, error)),
+        None => Ok(()),
+    }
 }
 
 // The commands below are synchronous on purpose: they run one after another, in call order, on the

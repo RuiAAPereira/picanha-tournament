@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import PresentationControls from './components/PresentationControls'
 import { ROUTES } from './hashRoute'
 import { useTournamentSession } from './useTournamentSession'
 
@@ -19,15 +20,7 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
           {state && <a href={ROUTES.bracket}>Fase final</a>}
         </nav>
         <div className="actions">
-          <button type="button" onClick={() => void session.openPresentation()}>Apresentar</button>
-          {session.presentationOpen && (
-            <>
-              <button type="button" onClick={session.skipPresentation}>Saltar</button>
-              <button type="button" onClick={session.togglePresentationMuted}>
-                {session.presentationMuted ? 'Ativar som' : 'Silenciar'}
-              </button>
-            </>
-          )}
+          <PresentationControls />
           {state && <button type="button" onClick={() => void session.exportBackup()}>Exportar cópia de segurança</button>}
         </div>
       </header>

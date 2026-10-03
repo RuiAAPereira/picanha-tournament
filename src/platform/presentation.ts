@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { PresentationSnapshot, PresentationState, PresentationUpdate } from '../presentation/presentationState'
 import { projectPresentation, projectResting } from '../presentation/projection'
-import type { PresentationPort, PresentationSignal } from './presentationPort'
+import type { PresentationDisplay, PresentationPort, PresentationSignal } from './presentationPort'
 import type { InvokeFn } from './tournamentRepository'
 
 /** Events the Rust side emits: `state` and `skip` to the TV, `muted` to both windows, `closed` to the operator. */
@@ -14,7 +14,7 @@ export const PRESENTATION_EVENTS = {
 } as const
 
 /** Mirrors `PresentationErrorCode` in src-tauri/src/presentation/store.rs. */
-export const PRESENTATION_ERROR_CODES = ['window_closed', 'window_failed', 'unexpected'] as const
+export const PRESENTATION_ERROR_CODES = ['window_closed', 'window_failed', 'display_missing', 'unexpected'] as const
 
 export type PresentationErrorCode = typeof PRESENTATION_ERROR_CODES[number]
 
@@ -27,8 +27,8 @@ export const GENERIC_PRESENTATION_ERROR_MESSAGE = 'Ocorreu um erro inesperado na
 export type ListenFn = (event: string, handler: (message: { payload: unknown }) => void) => Promise<() => void>
 
 export type PresentationController = {
-  /** Opens the TV window, or shows and focuses it; a closed window is replaced. */
-  open(): Promise<void>
+  /** Opens the TV window on `display`, or moves, shows and focuses it; a closed window is replaced. */
+  open(display?: string): Promise<void>
   /** Sends a TV state. Idle states, and `reveal: false`, appear at once, without animation or sound. */
   publishPresentation(state: PresentationState, options?: { reveal?: boolean }): Promise<void>
   /** Completes the running reveal at once. */
@@ -89,7 +89,9 @@ export function createTauriPresentationController(
   }
 
   return {
-    open: () => call<void>(invokeFn, 'open_presentation_window'),
+    open: display => call<void>(invokeFn, 'open_presentation_window', { display: display ?? null }),
+    listDisplays: async () => (await call<PresentationDisplay[] | null>(invokeFn, 'list_presentation_displays')) ?? [],
+    close: () => call<void>(invokeFn, 'close_presentation_window'),
     publishPresentation,
     publish: (state, event) => publishPresentation(projectPresentation(state, event)),
     seed: state => publishPresentation(projectResting(state), { reveal: false }),

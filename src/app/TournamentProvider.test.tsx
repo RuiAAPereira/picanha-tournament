@@ -177,7 +177,8 @@ describe('presentation and export', () => {
     const { user } = renderOperator('#/operator', { presentation })
     await user.click(await screen.findByRole('button', { name: 'Apresentar' }))
     expect(presentation.open).toHaveBeenCalled()
-    expect(screen.queryByText(/apresentação/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/apresentação/i, { ignore: 'label, button, script, style' })).not.toBeInTheDocument()
   })
 
   it('exports a backup with a safe, dated file name', async () => {

@@ -20,14 +20,16 @@ Guião de aceitação para o operador. Cada passo indica o que fazer e o que dev
 | N.º | Ação | Resultado esperado |
 | --- | --- | --- |
 | 1 | Em "Início", clique em **Novo torneio**, dê um nome e inscreva 16 jogadores fictícios (botão **Adicionar**). | O formato recomendado é "4 grupos de 4, com fase final de 8 (apuram-se os 2 primeiros de cada grupo)". |
-| 2 | Clique em **Criar e sortear**. Na página "Sorteio", **antes** de sortear, clique em **Apresentar**. | Com o ecrã alargado, a apresentação abre logo em ecrã inteiro na TV, sem ser preciso arrastá-la. Se abrir no portátil e tiver de a arrastar, registe-o como desvio. (Só com um ecrã, abre numa janela de 1280×720.) A TV mostra "Picanha Tournament" e "A aguardar o torneio" (se já havia um torneio atual, mostra ainda o nome ou o campeão desse torneio até clicar em **Sortear**), sem botões do operador (apenas **Silenciar**). |
+| 2 | Clique em **Criar e sortear**. Na página "Sorteio", **antes** de sortear, escolha a TV em **Ecrã da apresentação** (por exemplo "Ecrã 3 — 1920×1080") e clique em **Apresentar**. | A lista mostra cada ecrã ligado com o número do Windows e a resolução (o principal com "(principal)"), mais "Janela (neste ecrã)". A apresentação abre logo em ecrã inteiro na TV escolhida, sem ser preciso arrastá-la; se abrir noutro ecrã, registe-o como desvio. (Com "Janela (neste ecrã)", abre numa janela de 1280×720 no ecrã do portátil.) Ao abrir de novo a aplicação, a lista volta a propor o mesmo ecrã. **Apresentar** dá lugar a **Saltar**, **Silenciar** e **Fechar apresentação**. A TV mostra "Picanha Tournament" e "A aguardar o torneio" (se já havia um torneio atual, mostra ainda o nome ou o campeão desse torneio até clicar em **Sortear**), sem botões do operador (apenas **Silenciar**). |
 | 3 | Sem tocar na TV, clique em **Sortear**. | Aparecem os quatro grupos no portátil e o estado de gravação mostra "Guardado". A TV mostra o sorteio com animação. Anote se o som tocou. |
 | 4 | Clique em **Continuar para os grupos** e registe um resultado de grupo (vencedor e bolas deixadas pelo derrotado), ainda sem tocar na TV. | A TV mostra o resultado com animação de cerca de 3 s. Anote se o som tocou sem clicar na TV. Se a TV mostrar "Clique no ecrã para ativar o som" (aceitável), clique uma vez na TV; a partir daí o som toca sem mais cliques. A classificação do grupo é atualizada no portátil. |
 | 5 | Registe outro resultado de grupo. | A TV mostra o resultado com animação e som, sem pedir outro clique. |
 | 6 | Registe outro resultado e clique em **Saltar** durante a animação. | A TV mostra logo o estado final da animação. |
 | 7 | Clique em **Silenciar** no portátil; registe um resultado. Depois clique em **Ativar som** na TV. | Com som desligado não se ouve nada. O botão na TV e no portátil mostram sempre o mesmo estado. |
 | 8 | Registe dois ou três resultados seguidos, rapidamente. | A TV termina no último resultado, sem mostrar um resultado antigo por cima de um novo. |
-| 9 | Feche a janela da TV e clique de novo em **Apresentar**. Faça duplo clique em **Apresentar**. | A TV reabre a mostrar o estado atual e só abre uma janela. O torneio no portátil nunca para. |
+| 9 | Clique em **Fechar apresentação** e depois de novo em **Apresentar**. Feche outra vez e faça duplo clique em **Apresentar**. | **Fechar apresentação** fecha a janela da TV e os botões da TV (**Saltar**, **Silenciar**, **Fechar apresentação**) desaparecem do portátil. A TV reabre a mostrar o estado atual e só abre uma janela. O torneio no portátil nunca para. |
+| 9a | Com a apresentação aberta, escolha outro ecrã em **Ecrã da apresentação** (por exemplo o do portátil ou "Janela (neste ecrã)") e clique em **Mover para este ecrã**; volte a escolher a TV e mova outra vez. | **Mover para este ecrã** só aparece quando o ecrã escolhido é diferente do atual. A apresentação passa para o ecrã escolhido (ecrã inteiro, ou janela de 1280×720) sem perder o que mostrava, e volta à TV em ecrã inteiro. |
+| 9b | Feche a apresentação, desligue o cabo da TV (sem tocar na lista) e clique em **Apresentar**. Volte a ligar a TV. | Aparece o aviso "O ecrã escolhido já não está ligado. Escolha outro." e o torneio continua. Ao abrir a lista, a TV desaparece enquanto estiver desligada e volta a aparecer quando é ligada de novo. |
 | 10 | Termine os grupos. Em **Ver fase final**, registe os quartos-de-final e uma meia-final. | Os jogos seguintes ficam com os jogadores apurados. |
 | 11 | Corrija um resultado de quarto-de-final, mudando o vencedor (**Corrigir**). | Aparece "Esta correção anula jogos já definidos" com a lista dos jogos afetados. **Cancelar** deixa tudo como estava. **Confirmar correção** limpa esses jogos e a TV mostra "Resultado corrigido". |
 | 12 | Registe a outra meia-final e a final. | O portátil mostra "Campeão: …". A TV mostra o campeão e o finalista vencido. |
@@ -45,7 +47,7 @@ Guião de aceitação para o operador. Cada passo indica o que fazer e o que dev
 
 Faça estas verificações em `npm run tauri dev` ou com o executável:
 
-- Abrir, fechar e reabrir a TV. Duplo clique em **Apresentar** abre uma só janela.
+- Abrir a TV no ecrã escolhido em **Ecrã da apresentação**, movê-la com **Mover para este ecrã**, fechá-la com **Fechar apresentação** e reabri-la. Duplo clique em **Apresentar** abre uma só janela.
 - Reiniciar a aplicação: a TV reaberta mostra o estado guardado, sem animação.
 - As animações duram cerca de 3 s. **Saltar** termina-as logo.
 - Sorteios grandes cabem a 1440 e a 1080 de altura:

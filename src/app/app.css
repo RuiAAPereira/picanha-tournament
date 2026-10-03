@@ -40,7 +40,7 @@
 .operator .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .operator .danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 
-.operator input { font: inherit; padding: 4px 8px; border: 1px solid var(--muted); border-radius: 4px; }
+.operator input, .operator select { font: inherit; padding: 4px 8px; border: 1px solid var(--muted); border-radius: 4px; }
 .operator input[aria-invalid='true'] { border-color: var(--danger); }
 .operator label { display: block; margin: 12px 0 4px; }
 .operator label.choice, .operator .inline label { display: flex; align-items: center; gap: 8px; margin: 4px 0; }

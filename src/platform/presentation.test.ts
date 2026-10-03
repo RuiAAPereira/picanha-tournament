@@ -9,6 +9,7 @@ import {
 
 const idle: PresentationState = { kind: 'idle', tournamentName: 'Torneio', payload: null }
 const champion: PresentationState = { kind: 'champion', tournamentName: 'Torneio', payload: { champion: 'Ana', runnerUp: 'Rui' } }
+const TV_ID = String.raw`\\.\DISPLAY3`
 const closed = { code: 'window_closed', message: 'A janela da apresentação está fechada.' }
 
 type Invoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>
@@ -19,10 +20,36 @@ const updates = (invoke: ReturnType<typeof fakeInvoke>) =>
   invoke.mock.calls.filter(([command]) => command === 'publish_presentation_state').map(([, args]) => args!.update)
 
 describe('createTauriPresentationController', () => {
-  it('opens the presentation window', async () => {
+  it('opens the presentation window on the chosen display, or where the app decides', async () => {
     const invoke = fakeInvoke()
-    await controllerWith(invoke).open()
-    expect(invoke).toHaveBeenCalledWith('open_presentation_window')
+    const controller = controllerWith(invoke)
+    await controller.open(TV_ID)
+    await controller.open('window')
+    await controller.open()
+    expect(invoke.mock.calls).toEqual([
+      ['open_presentation_window', { display: TV_ID }],
+      ['open_presentation_window', { display: 'window' }],
+      ['open_presentation_window', { display: null }],
+    ])
+  })
+
+  it('lists the connected displays', async () => {
+    const tv = { id: TV_ID, label: 'Ecrã 3', width: 1920, height: 1080, x: 3440, y: 0, primary: false, scaleFactor: 1 }
+    const invoke = vi.fn<Invoke>(async () => [tv])
+    expect(await controllerWith(invoke).listDisplays()).toEqual([tv])
+    expect(invoke).toHaveBeenCalledWith('list_presentation_displays')
+  })
+
+  it('closes the presentation window', async () => {
+    const invoke = fakeInvoke()
+    await controllerWith(invoke).close()
+    expect(invoke).toHaveBeenCalledWith('close_presentation_window')
+  })
+
+  it('passes a missing display through as it is', async () => {
+    const missing = { code: 'display_missing', message: 'O ecrã escolhido já não está ligado. Escolha outro.' }
+    const controller = controllerWith(vi.fn<Invoke>(async () => { throw missing }))
+    await expect(controller.open('gone')).rejects.toEqual(missing)
   })
 
   it('publishes a TV state with a reveal, and idle states without one', async () => {
